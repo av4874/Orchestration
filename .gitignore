@@ -1,0 +1,23 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.egg-info/
+.venv/
+venv/
+
+# Generated per round -- not committed
+results/
+agent_workspace/
+agent_traces/
+kaggle_export/
+
+# Committed explicitly
+!pipeline/attack_memory.json
+!models/.gitkeep
+
+# Models — versioned copies committed
+models/v*/
+
+# Secrets — never commit filled-in values
+jenkins/k8s/pipeline-secrets.yaml

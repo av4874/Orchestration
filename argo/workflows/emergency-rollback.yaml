@@ -1,0 +1,124 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: guardrail-emergency-rollback-
+  namespace: argo
+  labels:
+    workflow-type: emergency-rollback
+spec:
+  entrypoint: emergency-dag
+  arguments:
+    parameters:
+      - name: round
+        value: "1"
+      - name: reason
+        value: "Emergency rollback triggered by Orchestrator Agent"
+
+  templates:
+    - name: emergency-dag
+      dag:
+        tasks:
+          - name: rollback-immediately
+            template: rollback-tpl
+            arguments:
+              parameters:
+                - name: round
+                  value: "{{workflow.parameters.round}}"
+
+          - name: open-issue
+            dependencies: [rollback-immediately]
+            template: issue-tpl
+            arguments:
+              parameters:
+                - name: round
+                  value: "{{workflow.parameters.round}}"
+                - name: reason
+                  value: "{{workflow.parameters.reason}}"
+
+          - name: notify
+            dependencies: [open-issue]
+            template: notify-tpl
+            arguments:
+              parameters:
+                - name: round
+                  value: "{{workflow.parameters.round}}"
+
+    - name: rollback-tpl
+      inputs:
+        parameters:
+          - name: round
+      container:
+        image: bitnami/git:2
+        command: [sh, -c]
+        args:
+          - |
+            git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git" /app
+            cd /app
+            git config user.email "argo@guardrail.pipeline"
+            git config user.name "Argo Emergency"
+            git checkout HEAD~1 -- models/production/
+            git add models/production/
+            git diff --cached --quiet || git commit -m "chore: EMERGENCY rollback production models (round {{inputs.parameters.round}})"
+            git push origin HEAD
+            echo "EMERGENCY ROLLBACK: reverted production models (round {{inputs.parameters.round}})"
+        env:
+          - name: GITHUB_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: github-token
+          - name: GITHUB_REPO
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: github-repo
+
+    - name: issue-tpl
+      inputs:
+        parameters:
+          - name: round
+          - name: reason
+      container:
+        image: python:3.12-slim
+        command: [sh, -c]
+        args:
+          - |
+            apt-get update -qq && apt-get install -y -qq git
+            git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git" /app
+            cd /app
+            pip install -q requests urllib3
+            PYTHONPATH=/app python3 -c "
+            import json, sys
+            sys.path.insert(0, '/app')
+            from agents.tools.routing_tools import open_github_issue
+            result = open_github_issue(json.dumps({
+                'title': '[EMERGENCY] Round {{inputs.parameters.round}} — Models critically compromised',
+                'body': '{{inputs.parameters.reason}}\n\nEmergency rollback executed automatically.',
+                'round': int('{{inputs.parameters.round}}'),
+                'severity': 'critical',
+            }))
+            print(result)
+            "
+        env:
+          - name: GITHUB_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: github-token
+          - name: GITHUB_REPO
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: github-repo
+
+    - name: notify-tpl
+      inputs:
+        parameters:
+          - name: round
+      container:
+        image: python:3.12-slim
+        command: [python3, -c]
+        args:
+          - |
+            round_num = '{{inputs.parameters.round}}'
+            print(f'Emergency rollback complete for round {round_num}. GitHub issue opened. Investigate before next round.')

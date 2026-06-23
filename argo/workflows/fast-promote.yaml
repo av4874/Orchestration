@@ -1,0 +1,198 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: guardrail-fast-promote-
+  namespace: argo
+  labels:
+    workflow-type: fast-promote
+spec:
+  entrypoint: fast-promote-dag
+  arguments:
+    parameters:
+      - name: round
+        value: "1"
+      - name: model_path
+        value: "models/v1/"
+
+  templates:
+    - name: fast-promote-dag
+      dag:
+        tasks:
+          - name: package-model
+            template: package-tpl
+            arguments:
+              parameters:
+                - name: round
+                  value: "{{workflow.parameters.round}}"
+                - name: model_path
+                  value: "{{workflow.parameters.model_path}}"
+
+          - name: stage-deploy
+            dependencies: [package-model]
+            template: stage-tpl
+            arguments:
+              parameters:
+                - name: round
+                  value: "{{workflow.parameters.round}}"
+                - name: model_path
+                  value: "{{workflow.parameters.model_path}}"
+
+          - name: smoke-tests
+            dependencies: [stage-deploy]
+            template: smoke-tpl
+
+          - name: promote
+            dependencies: [smoke-tests]
+            template: promote-tpl
+            arguments:
+              parameters:
+                - name: round
+                  value: "{{workflow.parameters.round}}"
+
+          - name: notify
+            dependencies: [promote]
+            template: notify-tpl
+            arguments:
+              parameters:
+                - name: round
+                  value: "{{workflow.parameters.round}}"
+
+    - name: package-tpl
+      inputs:
+        parameters:
+          - name: round
+          - name: model_path
+      container:
+        image: python:3.12-slim
+        command: [sh, -c]
+        args:
+          - |
+            echo "Fast-promote: low severity — packaging model {{inputs.parameters.model_path}} (round {{inputs.parameters.round}})"
+
+    - name: stage-tpl
+      inputs:
+        parameters:
+          - name: round
+          - name: model_path
+      container:
+        image: python:3.12-slim
+        command: [sh, -c]
+        args:
+          - |
+            apt-get update -qq && apt-get install -y -qq git
+            git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git" /app
+            cd /app
+            pip install -q requests urllib3 fastapi uvicorn pydantic jsonschema
+            PYTHONPATH=/app python siem/deploy.py \
+              --round "{{inputs.parameters.round}}" \
+              --model-path "{{inputs.parameters.model_path}}" \
+              --staging
+        env:
+          - name: STAGING_URL
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: staging-url
+          - name: GITHUB_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: github-token
+          - name: GITHUB_REPO
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: github-repo
+
+    - name: smoke-tpl
+      container:
+        image: python:3.12-slim
+        command: [sh, -c]
+        args:
+          - |
+            apt-get update -qq && apt-get install -y -qq git
+            git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git" /app
+            cd /app
+            pip install -q requests urllib3
+            PYTHONPATH=/app python siem/smoke_test.py --samples 5
+        env:
+          - name: STAGING_URL
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: staging-url
+          - name: GITHUB_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: github-token
+          - name: GITHUB_REPO
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: github-repo
+
+    - name: promote-tpl
+      inputs:
+        parameters:
+          - name: round
+      container:
+        image: bitnami/git:2
+        command: [sh, -c]
+        args:
+          - |
+            git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git" /app
+            cd /app
+            git config user.email "argo@guardrail.pipeline"
+            git config user.name "Argo Fast-Promote"
+            ROUND="{{inputs.parameters.round}}"
+            if [ -d "models/v${ROUND}/" ]; then
+              cp -r "models/v${ROUND}/." models/production/
+              git add models/production/
+              git diff --cached --quiet || git commit -m "chore: fast-promote models/v${ROUND} to production"
+              git push origin HEAD
+              echo "Fast promoted models/v${ROUND}/ to models/production/"
+            else
+              echo "WARNING: models/v${ROUND}/ not found — nothing to promote"
+            fi
+        env:
+          - name: GITHUB_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: github-token
+          - name: GITHUB_REPO
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: github-repo
+
+    - name: notify-tpl
+      inputs:
+        parameters:
+          - name: round
+      container:
+        image: bitnami/git:2
+        command: [sh, -c]
+        args:
+          - |
+            ROUND="{{inputs.parameters.round}}"
+            git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git" /app
+            cd /app
+            git config user.email "argo@guardrail.pipeline"
+            git config user.name "Argo Notify"
+            git add pipeline/attack_memory.json
+            git diff --cached --quiet && echo "No changes to commit" || \
+              git commit -m "chore: fast-promote round ${ROUND}" && git push origin HEAD
+            echo "Fast-promote round ${ROUND} complete."
+        env:
+          - name: GITHUB_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: github-token
+          - name: GITHUB_REPO
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: github-repo

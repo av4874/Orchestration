@@ -1,0 +1,29 @@
+{
+  "rounds": [
+    {
+      "round": 1,
+      "timestamp": "2026-06-22T19:25:46.933472+00:00",
+      "top_family": "base64_encoding",
+      "detector": "injection",
+      "evasion": 0.71,
+      "action": "retrain",
+      "notes": "Round 1: base64 caught 71% \u2014 retrain queued."
+    },
+    {
+      "round": 1,
+      "timestamp": "2026-06-23T11:23:53.646172+00:00",
+      "top_family": "base64_encoding",
+      "detector": "injection",
+      "evasion": 1.0,
+      "action": "retrain",
+      "notes": "Round 1: base64 caught 100% \u2014 retrain queued."
+    }
+  ],
+  "current_focus": [
+    "context_flooding",
+    "fragmented_instruction"
+  ],
+  "known_blind_spots": [
+    "base64_encoding"
+  ]
+}

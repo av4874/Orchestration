@@ -1,0 +1,31 @@
+# Jenkins plugins — installed via plugin-installation-manager-tool at image build time
+# Versions pinned to latest stable as of 2026-06
+
+# Core CI/CD
+workflow-aggregator:latest
+git:latest
+github:latest
+github-branch-source:latest
+
+# Kubernetes agent provisioning
+kubernetes:latest
+kubernetes-cli:latest
+
+# Pipeline utilities
+pipeline-utility-steps:latest
+pipeline-stage-view:latest
+
+# Credentials
+credentials:latest
+credentials-binding:latest
+plain-credentials:latest
+
+# Reporting
+htmlpublisher:latest
+junit:latest
+timestamper:latest
+ansicolor:latest
+
+# Configuration as Code
+configuration-as-code:latest
+job-dsl:latest

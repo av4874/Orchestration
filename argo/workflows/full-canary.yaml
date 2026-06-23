@@ -1,0 +1,290 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: guardrail-full-canary-
+  namespace: argo
+  labels:
+    workflow-type: full-canary
+spec:
+  entrypoint: deploy-dag
+  arguments:
+    parameters:
+      - name: round
+        value: "1"
+      - name: model_path
+        value: "models/v1/"
+      - name: canary_duration
+        value: "3600"      # 60 minutes
+      - name: fp_threshold
+        value: "0.05"      # 5% FP rate triggers rollback
+
+  templates:
+
+    # ── DAG ──────────────────────────────────────────────────────────────────
+    - name: deploy-dag
+      dag:
+        tasks:
+          - name: package-model
+            template: package-model-tpl
+            arguments:
+              parameters:
+                - name: round
+                  value: "{{workflow.parameters.round}}"
+                - name: model_path
+                  value: "{{workflow.parameters.model_path}}"
+
+          - name: stage-deploy
+            dependencies: [package-model]
+            template: stage-deploy-tpl
+            arguments:
+              parameters:
+                - name: round
+                  value: "{{workflow.parameters.round}}"
+                - name: model_path
+                  value: "{{workflow.parameters.model_path}}"
+
+          - name: canary-monitor
+            dependencies: [stage-deploy]
+            template: canary-monitor-tpl
+            arguments:
+              parameters:
+                - name: duration
+                  value: "{{workflow.parameters.canary_duration}}"
+                - name: fp_threshold
+                  value: "{{workflow.parameters.fp_threshold}}"
+
+          - name: promote
+            dependencies: [canary-monitor]
+            when: "{{tasks.canary-monitor.outputs.result}} == passed"
+            template: promote-tpl
+            arguments:
+              parameters:
+                - name: round
+                  value: "{{workflow.parameters.round}}"
+
+          - name: rollback
+            dependencies: [canary-monitor]
+            when: "{{tasks.canary-monitor.outputs.result}} == failed"
+            template: rollback-tpl
+            arguments:
+              parameters:
+                - name: round
+                  value: "{{workflow.parameters.round}}"
+
+          - name: notify
+            dependencies: [promote, rollback]
+            template: notify-tpl
+            arguments:
+              parameters:
+                - name: round
+                  value: "{{workflow.parameters.round}}"
+
+    # ── Templates ─────────────────────────────────────────────────────────────
+    - name: package-model-tpl
+      inputs:
+        parameters:
+          - name: round
+          - name: model_path
+      container:
+        image: python:3.12-slim
+        command: [sh, -c]
+        args:
+          - |
+            apt-get update -qq && apt-get install -y -qq git
+            git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git" /app
+            cd /app
+            python3 -c "
+            import tarfile, os
+            model_path = '{{inputs.parameters.model_path}}'
+            round_num = '{{inputs.parameters.round}}'
+            if not os.path.isdir(model_path):
+                print(f'WARNING: {model_path} not found — packaging skipped (first round or model not yet trained)')
+            else:
+                tarball = f'/tmp/model_v{round_num}.tar.gz'
+                with tarfile.open(tarball, 'w:gz') as tar:
+                    tar.add(model_path)
+                print(f'Packaged {model_path} to {tarball}')
+            "
+        env:
+          - name: GITHUB_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: github-token
+          - name: GITHUB_REPO
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: github-repo
+
+    - name: stage-deploy-tpl
+      inputs:
+        parameters:
+          - name: round
+          - name: model_path
+      container:
+        image: python:3.12-slim
+        command: [sh, -c]
+        args:
+          - |
+            apt-get update -qq && apt-get install -y -qq git
+            git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git" /app
+            cd /app
+            pip install -q requests urllib3 fastapi uvicorn pydantic jsonschema
+            PYTHONPATH=/app python siem/deploy.py \
+              --round "{{inputs.parameters.round}}" \
+              --model-path "{{inputs.parameters.model_path}}" \
+              --staging
+        env:
+          - name: STAGING_URL
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: staging-url
+          - name: GITHUB_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: github-token
+          - name: GITHUB_REPO
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: github-repo
+
+    - name: canary-monitor-tpl
+      inputs:
+        parameters:
+          - name: duration
+          - name: fp_threshold
+      outputs:
+        parameters:
+          - name: result
+            valueFrom:
+              path: /tmp/canary_result.txt
+      container:
+        image: python:3.12-slim
+        command: [sh, -c]
+        args:
+          - |
+            apt-get update -qq && apt-get install -y -qq git
+            git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git" /app
+            cd /app
+            pip install -q requests urllib3
+            PYTHONPATH=/app python siem/canary_monitor.py \
+              --duration "{{inputs.parameters.duration}}" \
+              --fp-threshold "{{inputs.parameters.fp_threshold}}" \
+              --result-path /tmp/canary_result.txt
+        env:
+          - name: STAGING_URL
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: staging-url
+          - name: GITHUB_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: github-token
+          - name: GITHUB_REPO
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: github-repo
+
+    - name: promote-tpl
+      inputs:
+        parameters:
+          - name: round
+      container:
+        image: bitnami/git:2
+        command: [sh, -c]
+        args:
+          - |
+            git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git" /app
+            cd /app
+            git config user.email "argo@guardrail.pipeline"
+            git config user.name "Argo Promote"
+            ROUND="{{inputs.parameters.round}}"
+            if [ -d "models/v${ROUND}/" ]; then
+              cp -r "models/v${ROUND}/." models/production/
+              git add models/production/
+              git diff --cached --quiet || git commit -m "chore: promote models/v${ROUND} to production"
+              git tag "release-round-${ROUND}"
+              git push origin HEAD --tags
+              echo "Promoted models/v${ROUND}/ to models/production/"
+            else
+              echo "WARNING: models/v${ROUND}/ not found — nothing to promote"
+            fi
+        env:
+          - name: GITHUB_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: github-token
+          - name: GITHUB_REPO
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: github-repo
+
+    - name: rollback-tpl
+      inputs:
+        parameters:
+          - name: round
+      container:
+        image: bitnami/git:2
+        command: [sh, -c]
+        args:
+          - |
+            git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git" /app
+            cd /app
+            git config user.email "argo@guardrail.pipeline"
+            git config user.name "Argo Rollback"
+            git checkout HEAD~1 -- models/production/
+            git add models/production/
+            git diff --cached --quiet || git commit -m "chore: rollback production models (round {{inputs.parameters.round}})"
+            git push origin HEAD
+            echo "EMERGENCY ROLLBACK: reverted production models (round {{inputs.parameters.round}})"
+        env:
+          - name: GITHUB_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: github-token
+          - name: GITHUB_REPO
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: github-repo
+
+    - name: notify-tpl
+      inputs:
+        parameters:
+          - name: round
+      container:
+        image: bitnami/git:2
+        command: [sh, -c]
+        args:
+          - |
+            REPO=$(echo "$GITHUB_REPO")
+            ROUND="{{inputs.parameters.round}}"
+            git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git" /app
+            cd /app
+            git config user.email "argo@guardrail.pipeline"
+            git config user.name "Argo Notify"
+            git add pipeline/attack_memory.json
+            git diff --cached --quiet && echo "No changes to commit" || \
+              git commit -m "chore: update attack_memory.json round ${ROUND}" && git push origin HEAD
+            echo "Round ${ROUND} complete. attack_memory.json committed."
+        env:
+          - name: GITHUB_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: github-token
+          - name: GITHUB_REPO
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-secrets
+                key: github-repo

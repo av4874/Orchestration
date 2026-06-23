@@ -1,0 +1,91 @@
+---
+# Staging scorer — serves STAGING_URL/score for Argo smoke_test + canary_monitor
+# Always running in K8s; Argo deploy step copies new model files, restarts pod.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: guardrail-staging
+  namespace: jenkins
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: guardrail-staging
+  template:
+    metadata:
+      labels:
+        app: guardrail-staging
+    spec:
+      containers:
+        - name: staging
+          image: python:3.12-slim
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              pip install --no-cache-dir fastapi uvicorn requests pydantic urllib3 jsonschema --quiet
+              cd /workspace
+              python -m uvicorn siem.app:app --host 0.0.0.0 --port 7860
+          ports:
+            - containerPort: 7860
+          env:
+            - name: PYTHONPATH
+              value: /workspace
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: pipeline-secrets
+                  key: hf-token
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 7860
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+      initContainers:
+        - name: checkout-code
+          image: bitnami/git:2
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git" /workspace
+          env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: pipeline-secrets
+                  key: github-token
+            - name: GITHUB_REPO
+              valueFrom:
+                secretKeyRef:
+                  name: pipeline-secrets
+                  key: github-repo
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+      volumes:
+        - name: workspace
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: guardrail-staging
+  namespace: jenkins
+spec:
+  selector:
+    app: guardrail-staging
+  ports:
+    - port: 7860
+      targetPort: 7860
