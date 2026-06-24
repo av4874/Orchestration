@@ -43,7 +43,7 @@ TOOLS (call in order):
 1. read_message {"from":"red_team","to":"orchestrator"}
 2. read_message {"from":"blue_team","to":"orchestrator"}
 3. read_evasion_report (if Jenkins already ran)
-4. analyze_weakness if severity unclear
+4. analyze_weakness {"detector":"all"} — always call once, do not repeat
 5. decide_routing {"action":"retrain|partial_retrain|fast_promote|emergency_rollback|skip","severity":"critical|high|medium|low|none","argo_workflow":"full-canary|fast-promote|emergency-rollback|none","confidence":<0.0-1.0>,"reason":"<grounded in evasion numbers>"}
 6. set_env_vars {"AI_ACTION":"...","ARGO_WORKFLOW":"...","SEVERITY":"..."}
 7. trigger_argo {"workflow":"...","round":N,"dry_run":true}
@@ -153,18 +153,21 @@ def run(round_num: int, dry_run: bool):
         print(f"[Orchestrator] LIVE RUN — round {round_num}")
         llm = _make_llm()
         agent = create_react_agent(llm, TOOLS, prompt=SYSTEM_PROMPT)
-        result = agent.invoke({"messages": [HumanMessage(content=(
-            f"Execute pipeline orchestration for round {round_num}. "
-            "You MUST call tools — do NOT write decisions as text. "
-            "Step 1: call read_message from red_team. "
-            "Step 2: call read_message from blue_team. "
-            "Step 3: call read_evasion_report. "
-            "Step 4: call decide_routing with action, severity, argo_workflow, confidence, reason. "
-            "Step 5: call set_env_vars with AI_ACTION, ARGO_WORKFLOW, SEVERITY. "
-            "Step 6: call trigger_argo with dry_run=true if no ARGO_TOKEN. "
-            "Step 7: call write_memory with round summary. "
-            "DO NOT write routing decisions as text — only tool calls count."
-        ))]})
+        result = agent.invoke(
+            {"messages": [HumanMessage(content=(
+                f"Execute pipeline orchestration for round {round_num}. "
+                "You MUST call tools — do NOT write decisions as text. "
+                "Step 1: call read_message from red_team. "
+                "Step 2: call read_message from blue_team. "
+                "Step 3: call read_evasion_report. "
+                "Step 4: call decide_routing with action, severity, argo_workflow, confidence, reason. "
+                "Step 5: call set_env_vars with AI_ACTION, ARGO_WORKFLOW, SEVERITY. "
+                "Step 6: call trigger_argo with dry_run=true if no ARGO_TOKEN. "
+                "Step 7: call write_memory with round summary. "
+                "DO NOT write routing decisions as text — only tool calls count."
+            ))]},
+            config={"recursion_limit": 20},
+        )
 
         trace = {
             "round": round_num, "mode": "live", "agent": "orchestrator",

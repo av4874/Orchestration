@@ -119,15 +119,18 @@ def run(round_num: int, dry_run: bool):
         print(f"[Blue Team] LIVE RUN — round {round_num}")
         llm = _make_llm()
         agent = create_react_agent(llm, TOOLS, prompt=SYSTEM_PROMPT)
-        result = agent.invoke({"messages": [HumanMessage(content=(
-            f"Execute Blue Team analysis for round {round_num}. "
-            "You MUST call tools — do NOT write analysis as text. "
-            "Step 1: call read_message from red_team now. "
-            "Step 2: call analyze_weakness with detector=all. "
-            "Step 3: call send_message to red_team with feedback. "
-            "Step 4: call send_message to orchestrator with full vulnerability_report. "
-            "DO NOT summarize in text — only tool calls count."
-        ))]})
+        result = agent.invoke(
+            {"messages": [HumanMessage(content=(
+                f"Execute Blue Team analysis for round {round_num}. "
+                "You MUST call tools — do NOT write analysis as text. "
+                "Step 1: call read_message from red_team now. "
+                "Step 2: call analyze_weakness with detector=all. "
+                "Step 3: call send_message to red_team with feedback. "
+                "Step 4: call send_message to orchestrator with full vulnerability_report. "
+                "DO NOT summarize in text — only tool calls count."
+            ))]},
+            config={"recursion_limit": 15},
+        )
 
         trace = {
             "round": round_num, "mode": "live", "agent": "blue_team",
