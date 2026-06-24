@@ -179,7 +179,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore: round-${{ needs.agent-attack-cycle.outputs.round }} attack samples"
           branch: attacks/round-${{ needs.agent-attack-cycle.outputs.round }}-samples
-          base: main
+          base: master
           title: "[Round ${{ needs.agent-attack-cycle.outputs.round }}] Adversarial Attack Samples"
           body-path: /tmp/pr_body.md
           labels: |
