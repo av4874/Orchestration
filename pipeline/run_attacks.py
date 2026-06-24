@@ -1,4 +1,4 @@
-﻿"""
+"""
 Segment 4: Run adversarial samples against LLM Threat Shield's 4 DistilBERT detectors.
 Calls Builder117/Orchestration HF Space models via HF Inference API â€” no local clone needed.
 
@@ -28,8 +28,6 @@ def run_detector(samples: list, detector: str) -> dict:
     total = 0
 
     for s in samples:
-        if s.get("detector") not in (detector, None):
-            continue
         result = score_sample(s["prompt"], detector)
         total += 1
         if result.get("evaded"):

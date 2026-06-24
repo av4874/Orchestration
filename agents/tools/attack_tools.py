@@ -1,10 +1,9 @@
-﻿"""
+"""
 attack_tools.py — generate adversarial samples via HF Inference API + validate schema.
 """
 import json
 import os
 import re
-import uuid
 from pathlib import Path
 
 import requests
@@ -80,18 +79,58 @@ def _parse_json_block(text: str) -> list:
         raise ValueError(f"Malformed JSON array in model output: {e}") from e
 
 
+_HOMOGLYPH_MAP = {
+    'a': 'а', 'e': 'е', 'o': 'о', 'c': 'с', 'r': 'р',
+    'i': 'і', 'g': 'ɡ', 'p': 'р', 's': 'ѕ', 'x': 'х',
+}
+_INJECTION_KEYWORDS = [
+    'ignore', 'disregard', 'override', 'instructions', 'previous',
+    'context', 'system', 'prompt', 'forget', 'bypass', 'jailbreak',
+    'reveal', 'leak', 'output', 'inject',
+]
+
+def _apply_homoglyphs(text: str) -> str:
+    """Replace Latin chars in injection keywords with Cyrillic/Greek lookalikes."""
+    import re
+    def replace_word(m):
+        w = m.group(0)
+        if w.lower() in _INJECTION_KEYWORDS:
+            return ''.join(_HOMOGLYPH_MAP.get(ch.lower(), ch) for ch in w)
+        return w
+    return re.sub(r'\b\w+\b', replace_word, text)
+
+
 def _generate_from_dataset(family: str, count: int, round_num: int) -> list:
     """Pull pre-generated samples from HF Hub dataset, re-ID for current round."""
     from datasets import load_dataset
-    ds = load_dataset(HF_DATASET, split="train")
-    filtered = ds.filter(lambda x: x["attack_family"] == family)
+    ds = load_dataset(HF_DATASET, split="train", token=os.environ.get("HF_TOKEN"))
+
+    # Detect family column name (dataset may use 'attack_family' or 'family')
+    family_col = "attack_family" if "attack_family" in ds.column_names else "family"
+    if family_col not in ds.column_names:
+        raise ValueError(f"Dataset has no 'attack_family' or 'family' column. Columns: {ds.column_names}")
+
+    filtered = ds.filter(lambda x: x[family_col] == family)
     if len(filtered) == 0:
-        raise ValueError(f"No samples for family '{family}' in dataset {HF_DATASET}")
+        raise ValueError(f"No samples for family='{family}' in {HF_DATASET}. "
+                         f"Available families: {list(set(ds[family_col]))}")
     n = min(count, len(filtered))
     rows = filtered.shuffle(seed=round_num).select(range(n))
     samples = rows.to_list()
+
+    # Normalise to SAMPLE_SCHEMA field names
+    prompt_col = "prompt" if "prompt" in (samples[0] if samples else {}) else "text"
+    detector_col = "detector" if "detector" in (samples[0] if samples else {}) else None
     for i, s in enumerate(samples):
         s["id"] = f"r{round_num}_{family}_{i:03d}"
+        s["attack_family"] = family
+        if prompt_col != "prompt" and prompt_col in s:
+            s["prompt"] = s.pop(prompt_col)
+        if detector_col is None:
+            s.setdefault("detector", ATTACK_FAMILIES.get(family, "injection"))
+        s.setdefault("expected_evasion", True)
+        if family == "unicode_homograph":
+            s["prompt"] = _apply_homoglyphs(s["prompt"])
     return samples
 
 
@@ -120,7 +159,14 @@ def generate_samples(family: str = "unicode_homograph", count: int = 5, round: i
             samples = _generate_from_dataset(family, count, round_num)
             return json.dumps({"samples": samples, "family": family, "count": len(samples)}, indent=2)
         except Exception as e:
-            pass  # fall through to live generation
+            return f"ERROR: dataset pull failed for family='{family}' from {HF_DATASET}: {e}"
+
+    if not HF_DATASET and not os.environ.get("FORCE_LIVE"):
+        return (
+            "ERROR: ADVERSARIAL_DATASET env var not set. "
+            "Set it to Builder117/enterprise-adversarial-samples and re-run. "
+            "Do NOT fall back to live generation."
+        )
     detector = ATTACK_FAMILIES.get(family, "injection")
 
     sys_prompt = (

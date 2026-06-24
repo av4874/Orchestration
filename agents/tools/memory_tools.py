@@ -1,4 +1,4 @@
-﻿"""
+"""
 memory_tools.py — read/write persistent attack memory across rounds.
 attack_memory.json: committed to repo, updated by Argo notify step each round.
 """
@@ -31,10 +31,18 @@ def read_attack_memory(query: str = "") -> str:
     and known blind spots. Pass query="" for full memory or a keyword to filter rounds.
     """
     mem = _load()
+    rounds_summary = [
+        {"round": r.get("round"), "family": r.get("top_family"), "evasion": r.get("evasion"), "action": r.get("action")}
+        for r in mem.get("rounds", [])
+    ]
     if query:
-        rounds = [r for r in mem.get("rounds", []) if query.lower() in json.dumps(r).lower()]
-        return json.dumps({"filtered_rounds": rounds, "current_focus": mem.get("current_focus", [])}, indent=2)
-    return json.dumps(mem, indent=2)
+        rounds_summary = [r for r in rounds_summary if query.lower() in json.dumps(r).lower()]
+        return json.dumps({"filtered_rounds": rounds_summary, "current_focus": mem.get("current_focus", [])}, indent=2)
+    return json.dumps({
+        "rounds": rounds_summary,
+        "current_focus": mem.get("current_focus", []),
+        "known_blind_spots": mem.get("known_blind_spots", []),
+    }, indent=2)
 
 
 @tool

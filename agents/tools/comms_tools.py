@@ -1,4 +1,4 @@
-﻿"""
+"""
 comms_tools.py — agent-to-agent message passing via JSON files in agent_workspace/.
 """
 import json

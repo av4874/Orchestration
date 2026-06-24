@@ -1,4 +1,4 @@
-﻿"""
+"""
 routing_tools.py — Orchestrator tools for pipeline routing decisions and env var output.
 """
 import json

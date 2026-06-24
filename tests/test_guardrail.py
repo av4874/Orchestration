@@ -1,4 +1,4 @@
-﻿"""
+"""
 Quality gate: validates pipeline_decision.json schema and routing logic.
 Run: pytest tests/test_guardrail.py -v
 """

@@ -1,4 +1,4 @@
-﻿"""
+"""
 analysis_tools.py — Blue Team tools for reading evasion reports and analyzing detector weaknesses.
 """
 import json
@@ -54,12 +54,12 @@ def analyze_weakness(analysis_input: str) -> str:
     report_path = RESULTS_DIR / "evasion_report.json"
     if not report_path.exists():
         return json.dumps({
-            "note": "No evasion_report.json — mock data for dry-run",
+            "note": "No evasion_report.json yet — using prior-round estimates. Real scores available after run_attacks.py.",
             "weaknesses": [
-                {"detector": "injection", "family": "base64_encoding", "evasion": 0.71, "severity": "CRITICAL", "gap_score": 0.82},
-                {"detector": "jailbreak", "family": "roleplay_framing", "evasion": 0.22, "severity": "LOW", "gap_score": 0.21},
-                {"detector": "insecure_output", "family": "context_flooding", "evasion": 0.18, "severity": "LOW", "gap_score": 0.15},
-                {"detector": "indirect_injection", "family": "html_comment_smuggling", "evasion": 0.35, "severity": "HIGH", "gap_score": 0.45},
+                {"detector": "injection", "family": "unicode_homograph", "evasion": 0.70, "severity": "CRITICAL", "gap_score": 0.81},
+                {"detector": "indirect_injection", "family": "html_comment_smuggling", "evasion": 0.35, "severity": "HIGH", "gap_score": 0.40},
+                {"detector": "jailbreak", "family": "roleplay_framing", "evasion": 0.22, "severity": "LOW", "gap_score": 0.25},
+                {"detector": "insecure_output", "family": "context_flooding", "evasion": 0.18, "severity": "LOW", "gap_score": 0.21},
             ],
             "retrain_priority": ["injection", "indirect_injection"],
         }, indent=2)

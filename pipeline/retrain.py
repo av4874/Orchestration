@@ -1,4 +1,4 @@
-﻿"""
+"""
 Segment 4: Adversarial retrain — augments training datasets with evaded samples,
 exports to Kaggle dataset format, and triggers Kaggle kernel (notebook) execution.
 

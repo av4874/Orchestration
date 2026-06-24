@@ -77,10 +77,10 @@ def main():
     try:
         inj = score_via_api(processed, "injection")
         print(f"  Injection score:  {inj:.3f} {_severity(inj)}")
-        if inj < 0.50:
-            print("  ✅ CONFIRMED: base64 evades injection detector (gap to exploit)")
+        if inj >= 0.50:
+            print("  ✅ CONFIRMED: base64 DETECTED (score=HIGH) — detector trained on it, dead family")
         else:
-            print("  ⚠️  base64 detected — gap may be patched")
+            print("  ⚠️  base64 evades detector — unexpected, gap may have opened")
     except Exception as e:
         print(f"  ERROR: {e}")
 

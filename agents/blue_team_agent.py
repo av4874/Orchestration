@@ -1,4 +1,4 @@
-﻿"""
+"""
 blue_team_agent.py — Blue Team Agent: analyzes weaknesses, validates attack quality, recommends defense.
 
 Usage:
@@ -27,32 +27,27 @@ from agents.tools.memory_tools import read_attack_memory
 
 TOOLS = [read_attack_memory, read_evasion_report, analyze_weakness, send_message, read_message]
 
-SYSTEM_PROMPT = """You are the Blue Team Agent in an adversarial ML security pipeline.
-Your goal: analyze detector weaknesses, review Red Team attack proposals, recommend retraining priority.
+SYSTEM_PROMPT = """You are the Blue Team Agent. Analyze detector weaknesses, review Red Team attacks, recommend retraining.
 
-Workflow:
-1. read_message from red_team to see their attack proposal (from="red_team", to="blue_team")
-2. analyze_weakness to check if the proposed attack family exploits real detector gaps
-   - Input: {"detector": "all"} or {"detector": "injection", "family": "base64_encoding"}
-3. send_message back to red_team with feedback: which samples to drop, what to strengthen
-   - If no evasion_report yet (first round), base feedback on known detector limitations
-4. analyze_weakness again after reviewing all families
-5. send_message to orchestrator with your full vulnerability analysis and retrain recommendation
-   - Include: severity, which detectors are weak, recommended argo_workflow
+TOOLS (call in order):
+1. read_message {"from":"red_team","to":"blue_team"}
+2. analyze_weakness {"detector":"all"}
+3. send_message to red_team — JSON body with feedback on families to strengthen
+4. analyze_weakness {"detector":"injection","family":"<top_family>"} if score unclear
+5. send_message {"from":"blue_team","to":"orchestrator","type":"vulnerability_report","body":{"retrain":[...],"severity":"...","weakness_scores":{...},"recommended_argo_workflow":"full-canary"}}
 
-Always output JSON in message bodies. Severity levels: critical/high/medium/low."""
+Severity thresholds: critical >0.40 | high 0.25-0.40 | medium <0.25.
+Always JSON message bodies. Use real evasion scores when available."""
 
 
-def _make_hf_llm():
-    from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
-    endpoint = HuggingFaceEndpoint(
-        repo_id="Qwen/Qwen2.5-7B-Instruct",
-        huggingfacehub_api_token=os.environ.get("HF_TOKEN", ""),
-        task="text-generation",
-        max_new_tokens=1024,
+def _make_llm():
+    from langchain_anthropic import ChatAnthropic
+    return ChatAnthropic(
+        model="claude-haiku-4-5-20251001",
+        api_key=os.environ.get("ANTHROPIC_API_KEY", ""),
         temperature=0.2,
+        max_tokens=1024,
     )
-    return ChatHuggingFace(llm=endpoint)
 
 
 def run(round_num: int, dry_run: bool):
@@ -92,10 +87,10 @@ def run(round_num: int, dry_run: bool):
             "from": "blue_team", "to": "red_team", "round": round_num,
             "type": "attack_feedback",
             "body": {
-                "feedback": "base64_encoding targets real gap — injection detector weakest on encoded payloads.",
+                "feedback": "unicode_homograph targets real gap — injection detector weakest on homoglyph substitution.",
                 "focus": "injection",
                 "drop": [],
-                "strengthen": ["combine base64 with multilingual for higher evasion"],
+                "strengthen": ["combine unicode_homograph with context_flooding for higher evasion"],
             },
             "requires_response": False,
         }))
@@ -114,7 +109,7 @@ def run(round_num: int, dry_run: bool):
                     "indirect_injection": 0.35,
                 },
                 "recommended_argo_workflow": "full-canary" if severity in ("critical", "high") else "fast-promote",
-                "analysis_summary": f"Injection detector evasion {top_evasion:.0%} via base64 — retrain priority HIGH.",
+                "analysis_summary": f"Injection detector evasion {top_evasion:.0%} via unicode_homograph — retrain priority HIGH.",
             },
             "requires_response": False,
         }))
@@ -122,9 +117,18 @@ def run(round_num: int, dry_run: bool):
         trace["final_output"] = f"Blue Team round {round_num} complete — retrain_priority={retrain_priority}, severity={severity}"
     else:
         print(f"[Blue Team] LIVE RUN — round {round_num}")
-        llm = _make_hf_llm()
+        llm = _make_llm()
         agent = create_react_agent(llm, TOOLS, prompt=SYSTEM_PROMPT)
-        result = agent.invoke({"messages": [HumanMessage(content=f"Execute Blue Team analysis for round {round_num}.")]})
+        result = agent.invoke({"messages": [HumanMessage(content=(
+            f"Execute Blue Team analysis for round {round_num}. "
+            "You MUST call tools — do NOT write analysis as text. "
+            "Step 1: call read_message from red_team now. "
+            "Step 2: call analyze_weakness with detector=all. "
+            "Step 3: call send_message to red_team with feedback. "
+            "Step 4: call send_message to orchestrator with full vulnerability_report. "
+            "DO NOT summarize in text — only tool calls count."
+        ))]})
+
         trace = {
             "round": round_num, "mode": "live", "agent": "blue_team",
             "final_output": result["messages"][-1].content,

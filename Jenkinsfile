@@ -14,8 +14,10 @@ pipeline {
     PHISHING_PROJECT_PATH = '/workspace/phshing-email'
     RESULTS_DIR = 'results'
     HF_TOKEN = credentials('hf-token')
+    ANTHROPIC_API_KEY = credentials('anthropic-api-key')
     GITHUB_TOKEN = credentials('github-token')
-    GITHUB_REPO = credentials('github-repo')   // set as Jenkins secret text: 'owner/repo-name'
+    GITHUB_REPO = credentials('github-repo')
+    ADVERSARIAL_DATASET = 'Builder117/enterprise-adversarial-samples'
   }
 
   stages {

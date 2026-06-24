@@ -1,4 +1,4 @@
-﻿"""
+"""
 tests/test_tools.py — unit tests for all agent tools (no HF/Argo calls, fully mocked).
 Run: pytest tests/test_tools.py -v
 """

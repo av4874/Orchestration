@@ -93,7 +93,7 @@ def score_via_api(text: str, detector: str) -> float:
         f"{SPACE_URL}/gradio_api/call/{fn_name}/{event_id}",
         headers={"Authorization": f"Bearer {HF_TOKEN}"},
         verify=False,
-        timeout=60,
+        timeout=120,
         stream=True,
     )
     if not result_resp.ok:
