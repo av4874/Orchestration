@@ -57,7 +57,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ADVERSARIAL_DATASET: Builder117/enterprise-adversarial-samples
           ENTERPRISE_ROOT: ${{ github.workspace }}
-        run: python agents/red_team_agent.py --round ${{ steps.set-round.outputs.round }}
+        run: python agents/red_team_agent.py --round ${{ steps.set-round.outputs.round }} --dry-run
 
       - name: Run Blue Team Agent
         env:
@@ -65,7 +65,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ADVERSARIAL_DATASET: Builder117/enterprise-adversarial-samples
           ENTERPRISE_ROOT: ${{ github.workspace }}
-        run: python agents/blue_team_agent.py --round ${{ steps.set-round.outputs.round }}
+        run: python agents/blue_team_agent.py --round ${{ steps.set-round.outputs.round }} --dry-run
 
       - name: Validate attack sample schema
         run: |

@@ -37,25 +37,21 @@ TOOLS = [
     write_memory,
 ]
 
-SYSTEM_PROMPT = """You are the Pipeline Orchestrator Agent. Synthesize Red+Blue Team reports, decide routing, trigger Argo.
+SYSTEM_PROMPT = """You are the Pipeline Orchestrator. Read agent reports, decide routing, trigger Argo.
 
-TOOLS (call in order):
-1. read_message {"from":"red_team","to":"orchestrator"}
-2. read_message {"from":"blue_team","to":"orchestrator"}
-3. read_evasion_report (if Jenkins already ran)
-4. analyze_weakness {"detector":"all"} — always call once, do not repeat
-5. decide_routing {"action":"retrain|partial_retrain|fast_promote|emergency_rollback|skip","severity":"critical|high|medium|low|none","argo_workflow":"full-canary|fast-promote|emergency-rollback|none","confidence":<0.0-1.0>,"reason":"<grounded in evasion numbers>"}
-6. set_env_vars {"AI_ACTION":"...","ARGO_WORKFLOW":"...","SEVERITY":"..."}
-7. trigger_argo {"workflow":"...","round":N,"dry_run":true}
+Thresholds: evasion >0.40=CRITICAL/full-canary | 0.25-0.40=HIGH/full-canary | <0.25=LOW/fast-promote | multiple >0.40=emergency-rollback.
+
+TOOLS (in order):
+1. read_message from red_team
+2. read_message from blue_team
+3. read_evasion_report
+4. analyze_weakness {"detector":"all"} — once only
+5. decide_routing {action,severity,argo_workflow,confidence,reason}
+6. set_env_vars {AI_ACTION,ARGO_WORKFLOW,SEVERITY}
+7. trigger_argo {workflow,round,dry_run}
 8. write_memory with round summary
 
-THRESHOLDS:
-- evasion >0.40 any detector -> CRITICAL -> full-canary
-- evasion 0.25-0.40 -> HIGH -> full-canary
-- evasion <0.25 -> LOW -> fast-promote
-- multiple detectors >0.40 -> emergency-rollback
-
-Ground every decision in numbers. State confidence explicitly."""
+Ground decisions in numbers. No repeated tool calls."""
 
 
 def _make_llm():
@@ -151,23 +147,46 @@ def run(round_num: int, dry_run: bool):
         trace["final_output"] = f"Orchestrator round {round_num}: action={action}, severity={severity}, workflow={recommended_wf}, confidence={confidence}"
     else:
         print(f"[Orchestrator] LIVE RUN — round {round_num}")
+        # Load own session memory + structured agent summaries (clean context, no message bleed)
+        WORKSPACE = ENTERPRISE_ROOT / "agent_workspace"
+        session_mem_path = WORKSPACE / "orchestrator_session.json"
+        prior_context = ""
+        if session_mem_path.exists():
+            try:
+                prior = json.loads(session_mem_path.read_text(encoding="utf-8"))
+                prior_context = (
+                    f" Prior round {prior.get('round')}: action={prior.get('action')}, "
+                    f"severity={prior.get('severity')}, workflow={prior.get('workflow')}."
+                )
+            except Exception:
+                pass
+
         llm = _make_llm()
         agent = create_react_agent(llm, TOOLS, prompt=SYSTEM_PROMPT)
         result = agent.invoke(
             {"messages": [HumanMessage(content=(
-                f"Execute pipeline orchestration for round {round_num}. "
-                "You MUST call tools — do NOT write decisions as text. "
-                "Step 1: call read_message from red_team. "
-                "Step 2: call read_message from blue_team. "
-                "Step 3: call read_evasion_report. "
-                "Step 4: call decide_routing with action, severity, argo_workflow, confidence, reason. "
-                "Step 5: call set_env_vars with AI_ACTION, ARGO_WORKFLOW, SEVERITY. "
-                "Step 6: call trigger_argo with dry_run=true if no ARGO_TOKEN. "
-                "Step 7: call write_memory with round summary. "
-                "DO NOT write routing decisions as text — only tool calls count."
+                f"Execute orchestration for round {round_num}.{prior_context} "
+                "Call tools only. "
+                "Step 1: read_message from red_team. "
+                "Step 2: read_message from blue_team. "
+                "Step 3: read_evasion_report. "
+                "Step 4: decide_routing. "
+                "Step 5: set_env_vars. "
+                "Step 6: trigger_argo dry_run=true if no ARGO_TOKEN. "
+                "Step 7: write_memory."
             ))]},
-            config={"recursion_limit": 20},
+            config={"recursion_limit": 15},
         )
+
+        # Write compact session memory
+        WORKSPACE.mkdir(parents=True, exist_ok=True)
+        session_mem_path.write_text(json.dumps({
+            "round": round_num,
+            "action": "see attack_memory.json",
+            "severity": "see attack_memory.json",
+            "workflow": "see attack_memory.json",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }, indent=2), encoding="utf-8")
 
         trace = {
             "round": round_num, "mode": "live", "agent": "orchestrator",
