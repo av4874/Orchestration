@@ -76,11 +76,10 @@ def build_status(round_num: int) -> dict:
 
 
 def push_to_space(payload: dict, dry_run: bool) -> bool:
-    """Push pipeline_status.json to HF Space repo via HF Hub API."""
-    import base64
-    import requests
-    import urllib3
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    """Push pipeline_status.json to HF Space via git clone → write → commit → push."""
+    import shutil
+    import subprocess
+    import tempfile
 
     content = json.dumps(payload, indent=2)
 
@@ -93,65 +92,48 @@ def push_to_space(payload: dict, dry_run: bool) -> bool:
         print("ERROR: HF_TOKEN not set — cannot push to Space")
         return False
 
-    # Get current file SHA (needed for update)
-    url = f"{HF_API_BASE}/spaces/{SPACE_REPO}/resolve/main/{SPACE_FILE}"
-    sha = None
-    try:
-        r = requests.get(
-            f"https://huggingface.co/api/repos/{SPACE_REPO}/contents/{SPACE_FILE}",
-            headers={"Authorization": f"Bearer {HF_TOKEN}"},
-            verify=False, timeout=15,
-        )
-        if r.ok:
-            sha = r.json().get("sha")
-    except Exception:
-        pass
-
-    # Commit via HF Hub API
-    encoded = base64.b64encode(content.encode("utf-8")).decode("ascii")
-    body = {
-        "message": f"chore: update pipeline_status.json round {payload['round']}",
-        "content": encoded,
-    }
-    if sha:
-        body["sha"] = sha
+    clone_url = f"https://user:{HF_TOKEN}@huggingface.co/spaces/{SPACE_REPO}"
+    tmp_dir = Path(tempfile.mkdtemp(prefix="hf_space_"))
 
     try:
-        r = requests.put(
-            f"https://huggingface.co/api/spaces/{SPACE_REPO}/raw/main/{SPACE_FILE}",
-            headers={"Authorization": f"Bearer {HF_TOKEN}", "Content-Type": "application/json"},
-            json=body,
-            verify=False,
-            timeout=30,
+        print(f"[Space] Cloning {SPACE_REPO}...")
+        subprocess.run(
+            ["git", "clone", "--depth", "1", clone_url, str(tmp_dir)],
+            check=True, capture_output=True, timeout=60,
         )
-        if r.ok:
-            print(f"[Space] pipeline_status.json pushed — round {payload['round']}")
+
+        # Write updated status file
+        (tmp_dir / SPACE_FILE).write_text(content, encoding="utf-8")
+
+        # Commit and push
+        env = {**os.environ, "GIT_AUTHOR_NAME": "pipeline", "GIT_AUTHOR_EMAIL": "pipeline@guardrail",
+               "GIT_COMMITTER_NAME": "pipeline", "GIT_COMMITTER_EMAIL": "pipeline@guardrail"}
+
+        subprocess.run(["git", "add", SPACE_FILE], check=True, cwd=tmp_dir, capture_output=True)
+        result = subprocess.run(
+            ["git", "diff", "--cached", "--quiet"],
+            cwd=tmp_dir, capture_output=True,
+        )
+        if result.returncode == 0:
+            print("[Space] No changes to pipeline_status.json — skipping push")
             return True
-        # Fallback: huggingface_hub library
-        raise RuntimeError(f"HF API {r.status_code}: {r.text[:200]}")
-    except Exception as e:
-        print(f"  API push failed ({e}), trying huggingface_hub...")
 
-    try:
-        from huggingface_hub import HfApi
-        api = HfApi(token=HF_TOKEN)
-        import tempfile, os as _os
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as f:
-            f.write(content)
-            tmp = f.name
-        api.upload_file(
-            path_or_fileobj=tmp,
-            path_in_repo=SPACE_FILE,
-            repo_id=SPACE_REPO,
-            repo_type="space",
-            commit_message=f"chore: update pipeline_status.json round {payload['round']}",
+        subprocess.run(
+            ["git", "commit", "-m", f"chore: update pipeline_status.json round {payload['round']}"],
+            check=True, cwd=tmp_dir, capture_output=True, env=env,
         )
-        _os.unlink(tmp)
-        print(f"[Space] pipeline_status.json pushed via huggingface_hub — round {payload['round']}")
+        subprocess.run(
+            ["git", "push"],
+            check=True, cwd=tmp_dir, capture_output=True, timeout=60,
+        )
+        print(f"[Space] pipeline_status.json pushed — round {payload['round']}")
         return True
-    except Exception as e2:
-        print(f"ERROR: both push methods failed: {e2}")
+
+    except subprocess.CalledProcessError as e:
+        print(f"ERROR: git step failed: {e.stderr.decode()[:300]}")
         return False
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 def main():
