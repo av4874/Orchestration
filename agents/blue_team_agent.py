@@ -27,17 +27,17 @@ from agents.tools.memory_tools import read_attack_memory
 
 TOOLS = [read_attack_memory, read_evasion_report, analyze_weakness, send_message, read_message]
 
-SYSTEM_PROMPT = """You are the Blue Team Agent. Analyze detector weaknesses, review Red Team attacks, recommend retraining.
+SYSTEM_PROMPT = """You are the Blue Team Agent. Analyze detector weaknesses, recommend retraining.
 
-TOOLS (call in order):
+Severity: critical >0.40 | high 0.25-0.40 | medium <0.25.
+
+TOOLS (in order):
 1. read_message {"from":"red_team","to":"blue_team"}
 2. analyze_weakness {"detector":"all"}
-3. send_message to red_team — JSON body with feedback on families to strengthen
-4. analyze_weakness {"detector":"injection","family":"<top_family>"} if score unclear
-5. send_message {"from":"blue_team","to":"orchestrator","type":"vulnerability_report","body":{"retrain":[...],"severity":"...","weakness_scores":{...},"recommended_argo_workflow":"full-canary"}}
+3. send_message to red_team with feedback
+4. send_message to orchestrator with vulnerability_report: {retrain,severity,weakness_scores,recommended_argo_workflow}
 
-Severity thresholds: critical >0.40 | high 0.25-0.40 | medium <0.25.
-Always JSON message bodies. Use real evasion scores when available."""
+JSON bodies only. Use real evasion scores."""
 
 
 def _make_llm():
@@ -46,7 +46,7 @@ def _make_llm():
         model="claude-haiku-4-5-20251001",
         api_key=os.environ.get("ANTHROPIC_API_KEY", ""),
         temperature=0.2,
-        max_tokens=1024,
+        max_tokens=512,
     )
 
 
@@ -117,17 +117,54 @@ def run(round_num: int, dry_run: bool):
         trace["final_output"] = f"Blue Team round {round_num} complete — retrain_priority={retrain_priority}, severity={severity}"
     else:
         print(f"[Blue Team] LIVE RUN — round {round_num}")
+
+        # Load own session memory
+        WORKSPACE = ENTERPRISE_ROOT / "agent_workspace"
+        session_mem_path = WORKSPACE / "blue_team_session.json"
+        prior_context = ""
+        if session_mem_path.exists():
+            try:
+                prior = json.loads(session_mem_path.read_text(encoding="utf-8"))
+                prior_context = (
+                    f" Prior round {prior.get('round')}: severity={prior.get('severity')}, "
+                    f"retrain={prior.get('retrain')}."
+                )
+            except Exception:
+                pass
+
         llm = _make_llm()
         agent = create_react_agent(llm, TOOLS, prompt=SYSTEM_PROMPT)
-        result = agent.invoke({"messages": [HumanMessage(content=(
-            f"Execute Blue Team analysis for round {round_num}. "
-            "You MUST call tools — do NOT write analysis as text. "
-            "Step 1: call read_message from red_team now. "
-            "Step 2: call analyze_weakness with detector=all. "
-            "Step 3: call send_message to red_team with feedback. "
-            "Step 4: call send_message to orchestrator with full vulnerability_report. "
-            "DO NOT summarize in text — only tool calls count."
-        ))]})
+        result = agent.invoke(
+            {"messages": [HumanMessage(content=(
+                f"Execute Blue Team analysis for round {round_num}.{prior_context} "
+                "Call tools only. "
+                "Step 1: read_message from red_team. "
+                "Step 2: analyze_weakness detector=all. "
+                "Step 3: send_message to red_team with feedback. "
+                "Step 4: send_message to orchestrator with vulnerability_report."
+            ))]},
+            config={"recursion_limit": 10},
+        )
+
+        # Write compact session memory
+        WORKSPACE.mkdir(parents=True, exist_ok=True)
+        # Read real severity from the message blue team just sent
+        orch_msg_path = WORKSPACE / "blue_to_orchestrator.json"
+        severity_saved, retrain_saved = "unknown", []
+        if orch_msg_path.exists():
+            try:
+                sent = json.loads(orch_msg_path.read_text(encoding="utf-8"))
+                body = sent.get("body", {})
+                severity_saved = body.get("severity", "unknown")
+                retrain_saved = body.get("retrain", [])
+            except Exception:
+                pass
+        session_mem_path.write_text(json.dumps({
+            "round": round_num,
+            "severity": severity_saved,
+            "retrain": retrain_saved,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }, indent=2), encoding="utf-8")
 
         trace = {
             "round": round_num, "mode": "live", "agent": "blue_team",

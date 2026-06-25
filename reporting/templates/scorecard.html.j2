@@ -40,7 +40,7 @@
   <div class="grid-3">
     <div class="card">
       <div class="card-title">Overall Evasion Rate</div>
-      <div class="card-value" style="color: {% if overall_evasion >= 0.40 %}#dc2626{% elif overall_evasion >= 0.25 %}#ea580c{% else %}#16a34a{% endif %}">{{ overall_evasion_pct }}</div>
+      <div class="card-value" style="color: {% if overall_evasion and overall_evasion >= 0.40 %}#dc2626{% elif overall_evasion and overall_evasion >= 0.25 %}#ea580c{% else %}#16a34a{% endif %}">{{ overall_evasion_pct }}</div>
       <div class="card-sub">across all detectors</div>
     </div>
     <div class="card">
@@ -62,7 +62,7 @@
       <tr><th>Field</th><th>Value</th></tr>
       <tr><td>Action</td><td><span class="tag">{{ action }}</span></td></tr>
       <tr><td>Argo Workflow</td><td><span class="tag">{{ argo_workflow }}</span></td></tr>
-      <tr><td>Confidence</td><td>{{ "%.0f"|format(confidence * 100) }}%</td></tr>
+      <tr><td>Confidence</td><td>{% if confidence %}{{ "%.0f"|format(confidence * 100) }}%{% else %}n/a{% endif %}</td></tr>
       <tr><td>Models to retrain</td><td>
         {% if models_to_retrain %}
           {% for m in models_to_retrain %}<span class="tag">{{ m }}</span>{% endfor %}
@@ -109,7 +109,7 @@
       <tr>
         <td><span class="tag">{{ f.name }}</span></td>
         <td>{{ f.detector }}</td>
-        <td style="font-weight: 600; color: {% if f.evasion_raw >= 0.40 %}#dc2626{% elif f.evasion_raw >= 0.25 %}#ea580c{% else %}#16a34a{% endif %}">{{ f.evasion_pct }}</td>
+        <td style="font-weight: 600; color: {% if f.evasion_raw and f.evasion_raw >= 0.40 %}#dc2626{% elif f.evasion_raw and f.evasion_raw >= 0.25 %}#ea580c{% else %}#16a34a{% endif %}">{{ f.evasion_pct }}</td>
         <td>{{ f.evaded }} / {{ f.total }}</td>
       </tr>
       {% endfor %}
@@ -132,7 +132,7 @@
         <td><span class="history-round">{{ r.round }}</span></td>
         <td><span class="tag">{{ r.top_family }}</span></td>
         <td>{{ r.detector }}</td>
-        <td style="font-weight:600; color: {% if r.evasion >= 0.40 %}#dc2626{% elif r.evasion >= 0.25 %}#ea580c{% else %}#16a34a{% endif %}">{{ "%.1f"|format(r.evasion * 100) }}%</td>
+        <td style="font-weight:600; color: {% if r.evasion and r.evasion >= 0.40 %}#dc2626{% elif r.evasion and r.evasion >= 0.25 %}#ea580c{% else %}#16a34a{% endif %}">{% if r.evasion %}{{ "%.1f"|format(r.evasion * 100) }}%{% else %}n/a{% endif %}</td>
         <td><span class="tag">{{ r.action }}</span></td>
       </tr>
       {% endfor %}

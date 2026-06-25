@@ -4,6 +4,7 @@ attack_tools.py — generate adversarial samples via HF Inference API + validate
 import json
 import os
 import re
+from functools import lru_cache
 from pathlib import Path
 
 import requests
@@ -46,7 +47,7 @@ SAMPLE_SCHEMA = {
 }
 
 
-def _hf_generate(user_prompt: str, system_prompt: str = "", max_tokens: int = 800) -> str:
+def _hf_generate(user_prompt: str, system_prompt: str = "", max_tokens: int = 600) -> str:
     if not HF_TOKEN:
         raise RuntimeError("HF_TOKEN not set")
     messages = []
@@ -100,10 +101,15 @@ def _apply_homoglyphs(text: str) -> str:
     return re.sub(r'\b\w+\b', replace_word, text)
 
 
+@lru_cache(maxsize=1)
+def _load_hf_dataset(dataset_name: str, hf_token: str):
+    from datasets import load_dataset
+    return load_dataset(dataset_name, split="train", token=hf_token)
+
+
 def _generate_from_dataset(family: str, count: int, round_num: int) -> list:
     """Pull pre-generated samples from HF Hub dataset, re-ID for current round."""
-    from datasets import load_dataset
-    ds = load_dataset(HF_DATASET, split="train", token=os.environ.get("HF_TOKEN"))
+    ds = _load_hf_dataset(HF_DATASET, os.environ.get("HF_TOKEN", ""))
 
     # Detect family column name (dataset may use 'attack_family' or 'family')
     family_col = "attack_family" if "attack_family" in ds.column_names else "family"
@@ -262,11 +268,10 @@ def validate_samples(samples_json: str) -> str:
         out_path = RESULTS_DIR / "validated_samples.json"
         out_path.write_text(json.dumps(valid, indent=2), encoding="utf-8")
 
-    summary = {
+    invalid_ids = [r["id"] for r in results if not r["valid"]]
+    return json.dumps({
         "total": len(samples),
         "valid": len(valid),
         "invalid": len(invalid),
-        "results": results,
-        "saved_to": str(RESULTS_DIR / "validated_samples.json") if valid else None,
-    }
-    return json.dumps(summary, indent=2)
+        "invalid_ids": invalid_ids,
+    }, indent=2)

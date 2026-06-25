@@ -74,4 +74,5 @@ def read_message(route_json: str) -> str:
     if not path.exists():
         return f"No message yet at {path.name} — agent may not have sent yet."
 
-    return path.read_text(encoding="utf-8")
+    msg = json.loads(path.read_text(encoding="utf-8"))
+    return json.dumps(msg.get("body", msg), indent=2)
