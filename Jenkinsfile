@@ -81,6 +81,12 @@ pipeline {
       }
     }
 
+    stage('Push Space Status') {
+      steps {
+        sh "python pipeline/push_space_status.py --round ${params.ROUND}"
+      }
+    }
+
     stage('Quality Gate') {
       steps {
         sh "pytest tests/test_guardrail.py -v --tb=short"

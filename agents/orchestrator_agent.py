@@ -168,6 +168,17 @@ def run(round_num: int, dry_run: bool):
             "notes": f"Round {round_num}: {top_family} evasion {top_evasion:.0%} on {top_detector} — {action} queued.",
         }))
 
+        # Push round results to HF Space dashboard
+        try:
+            import subprocess
+            push_cmd = [
+                sys.executable, str(ENTERPRISE_ROOT / "pipeline" / "push_space_status.py"),
+                "--round", str(round_num),
+            ] + (["--dry-run"] if dry_run else [])
+            subprocess.run(push_cmd, check=False, timeout=60)
+        except Exception as e:
+            print(f"  [Space push] WARNING: {e}")
+
         trace["final_output"] = f"Orchestrator round {round_num}: action={action}, severity={severity}, workflow={recommended_wf}, confidence={confidence}"
     else:
         print(f"[Orchestrator] LIVE RUN — round {round_num}")
@@ -223,6 +234,16 @@ def run(round_num: int, dry_run: bool):
             "workflow": workflow_saved,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }, indent=2), encoding="utf-8")
+
+        # Push round results to HF Space dashboard
+        try:
+            import subprocess as _sp
+            _sp.run([
+                sys.executable, str(ENTERPRISE_ROOT / "pipeline" / "push_space_status.py"),
+                "--round", str(round_num),
+            ], check=False, timeout=60)
+        except Exception as _e:
+            print(f"  [Space push] WARNING: {_e}")
 
         trace = {
             "round": round_num, "mode": "live", "agent": "orchestrator",
