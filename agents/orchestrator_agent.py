@@ -82,21 +82,29 @@ def run(round_num: int, dry_run: bool):
         red_raw = step("read_message[red]", read_message, json.dumps({"from": "red_team", "to": "orchestrator"}))
         blue_raw = step("read_message[blue]", read_message, json.dumps({"from": "blue_team", "to": "orchestrator"}))
 
+        # Extract Red Team family actually used
+        try:
+            red_msg = json.loads(red_raw)
+            top_family = red_msg.get("top_family") or red_msg.get("families_tried", ["unknown"])[0]
+        except Exception:
+            top_family = "unknown"
+
         # Extract Blue Team severity
         try:
             blue_msg = json.loads(blue_raw)
-            body = blue_msg.get("body", {})
-            severity = body.get("severity", "high")
-            weakness_scores = body.get("weakness_scores", {})
-            retrain = body.get("retrain", ["injection"])
-            recommended_wf = body.get("recommended_argo_workflow", "full-canary")
+            severity = blue_msg.get("severity", "high")
+            weakness_scores = blue_msg.get("weakness_scores", {})
+            retrain = blue_msg.get("retrain", ["injection"])
+            recommended_wf = blue_msg.get("recommended_argo_workflow", "full-canary")
             top_evasion = max(weakness_scores.values()) if weakness_scores else 0.71
+            top_detector = max(weakness_scores, key=weakness_scores.get) if weakness_scores else "injection"
         except Exception as e:
             print(f"  WARNING: failed to parse blue_team message: {e} — using defaults")
             severity = "high"
             retrain = ["injection"]
             recommended_wf = "full-canary"
             top_evasion = 0.71
+            top_detector = "injection"
 
         # Also read evasion report if available
         step("read_evasion_report", read_evasion_report, "")
@@ -106,6 +114,23 @@ def run(round_num: int, dry_run: bool):
         action = action_map.get(severity, "retrain")
         confidence = 0.91 if top_evasion >= 0.40 else 0.72
 
+        # Rotate families: used family moves to known_blind_spots, next family takes focus
+        import json as _json
+        from agents.tools.memory_tools import MEMORY_PATH
+        try:
+            mem = _json.loads(MEMORY_PATH.read_text(encoding="utf-8")) if MEMORY_PATH.exists() else {}
+        except Exception:
+            mem = {}
+        current_focus = mem.get("current_focus", [])
+        known_blind_spots = list(set(mem.get("known_blind_spots", [])) | {top_family})
+        next_focus = [f for f in current_focus if f != top_family]
+        # Replenish focus from remaining families if running low
+        all_families = ["fragmented_instruction", "multilingual", "roleplay_framing",
+                        "html_comment_smuggling", "context_flooding", "unicode_homograph"]
+        available = [f for f in all_families if f not in known_blind_spots and f not in next_focus]
+        while len(next_focus) < 2 and available:
+            next_focus.append(available.pop(0))
+
         # Write decision
         decision = {
             "round": round_num,
@@ -114,9 +139,8 @@ def run(round_num: int, dry_run: bool):
             "severity": severity,
             "confidence": confidence,
             "argo_workflow": recommended_wf,
-            "reason": f"Injection evasion {top_evasion:.0%} via unicode_homograph confirmed by Blue Team. "
-                      f"Exceeds {'critical' if top_evasion >= 0.40 else 'high'} threshold.",
-            "next_attack_families": ["context_flooding", "fragmented_instruction"],
+            "reason": f"{top_detector} evasion {top_evasion:.0%} via {top_family} confirmed by Blue Team.",
+            "next_attack_families": next_focus,
         }
         step("decide_routing", decide_routing, json.dumps(decision))
 
@@ -132,16 +156,16 @@ def run(round_num: int, dry_run: bool):
             "workflow": recommended_wf, "round": round_num, "dry_run": True,
         }))
 
-        # Update attack memory
+        # Update attack memory with real values
         step("write_memory", write_memory, json.dumps({
             "round": round_num,
-            "top_family": "unicode_homograph",
-            "detector": "injection",
+            "top_family": top_family,
+            "detector": top_detector,
             "evasion": top_evasion,
             "action": action,
-            "current_focus": ["context_flooding", "fragmented_instruction"],
-            "known_blind_spots": ["base64_encoding", "unicode_homograph"],
-            "notes": f"Round {round_num}: unicode_homograph caught {top_evasion:.0%} — retrain queued.",
+            "current_focus": next_focus,
+            "known_blind_spots": sorted(known_blind_spots),
+            "notes": f"Round {round_num}: {top_family} evasion {top_evasion:.0%} on {top_detector} — {action} queued.",
         }))
 
         trace["final_output"] = f"Orchestrator round {round_num}: action={action}, severity={severity}, workflow={recommended_wf}, confidence={confidence}"
