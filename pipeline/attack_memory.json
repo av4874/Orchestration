@@ -44,6 +44,15 @@
       "evasion": 0.75,
       "action": "retrain",
       "notes": "Round 1: unicode_homograph caught 75% \u2014 retrain queued."
+    },
+    {
+      "round": 1,
+      "timestamp": "2026-06-25T16:34:58.878921+00:00",
+      "top_family": "unicode_homograph",
+      "detector": "injection",
+      "evasion": 0.71,
+      "action": "retrain",
+      "notes": "Round 1: unicode_homograph caught 71% \u2014 retrain queued."
     }
   ],
   "current_focus": [
