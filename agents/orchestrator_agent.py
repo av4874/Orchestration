@@ -60,7 +60,7 @@ def _make_llm():
         model="claude-haiku-4-5-20251001",
         api_key=os.environ.get("ANTHROPIC_API_KEY", ""),
         temperature=0.1,
-        max_tokens=1024,
+        max_tokens=512,
     )
 
 
@@ -175,16 +175,28 @@ def run(round_num: int, dry_run: bool):
                 "Step 6: trigger_argo dry_run=true if no ARGO_TOKEN. "
                 "Step 7: write_memory."
             ))]},
-            config={"recursion_limit": 15},
+            config={"recursion_limit": 10},
         )
 
         # Write compact session memory
         WORKSPACE.mkdir(parents=True, exist_ok=True)
+        # Read real routing decision from attack_memory.json last round entry
+        action_saved, severity_saved, workflow_saved = "unknown", "unknown", "unknown"
+        try:
+            from agents.tools.memory_tools import MEMORY_PATH
+            if MEMORY_PATH.exists():
+                mem = json.loads(MEMORY_PATH.read_text(encoding="utf-8"))
+                last = mem.get("rounds", [{}])[-1]
+                action_saved = last.get("action", "unknown")
+                severity_saved = last.get("evasion", "unknown")
+                workflow_saved = last.get("top_family", "unknown")
+        except Exception:
+            pass
         session_mem_path.write_text(json.dumps({
             "round": round_num,
-            "action": "see attack_memory.json",
-            "severity": "see attack_memory.json",
-            "workflow": "see attack_memory.json",
+            "action": action_saved,
+            "severity": severity_saved,
+            "workflow": workflow_saved,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }, indent=2), encoding="utf-8")
 

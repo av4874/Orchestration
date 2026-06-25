@@ -34,7 +34,7 @@ def read_attack_memory(query: str = "") -> str:
     rounds_summary = [
         {"round": r.get("round"), "family": r.get("top_family"), "evasion": r.get("evasion"), "action": r.get("action")}
         for r in mem.get("rounds", [])
-    ]
+    ][-3:]  # last 3 rounds only — caps token cost as history grows
     if query:
         rounds_summary = [r for r in rounds_summary if query.lower() in json.dumps(r).lower()]
         return json.dumps({"filtered_rounds": rounds_summary, "current_focus": mem.get("current_focus", [])}, indent=2)

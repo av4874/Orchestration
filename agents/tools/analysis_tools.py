@@ -30,13 +30,24 @@ def read_evasion_report(filter_detector: str = "") -> str:
     if filter_detector:
         if filter_detector not in DETECTORS:
             return f"ERROR: unknown detector '{filter_detector}'. Valid: {DETECTORS}"
+        data = report.get("per_detector", {}).get(filter_detector, {})
         return json.dumps({
             "detector": filter_detector,
-            "data": report.get("per_detector", {}).get(filter_detector, {}),
+            "evasion_rate": data.get("evasion_rate"),
+            "evaded": data.get("evaded"),
+            "total": data.get("total"),
             "round": report.get("round"),
         }, indent=2)
 
-    return json.dumps(report, indent=2)
+    # Return slim summary — full report stays on disk at results/evasion_report.json
+    per_det = report.get("per_detector", {})
+    return json.dumps({
+        "round": report.get("round"),
+        "per_detector": {
+            d: {"evasion_rate": v.get("evasion_rate"), "evaded": v.get("evaded"), "total": v.get("total")}
+            for d, v in per_det.items()
+        },
+    }, indent=2)
 
 
 @tool
@@ -54,12 +65,12 @@ def analyze_weakness(analysis_input: str) -> str:
     report_path = RESULTS_DIR / "evasion_report.json"
     if not report_path.exists():
         return json.dumps({
-            "note": "No evasion_report.json yet — using prior-round estimates. Real scores available after run_attacks.py.",
+            "note": "No evasion_report.json — using prior-round estimates.",
             "weaknesses": [
-                {"detector": "injection", "family": "unicode_homograph", "evasion": 0.70, "severity": "CRITICAL", "gap_score": 0.81},
-                {"detector": "indirect_injection", "family": "html_comment_smuggling", "evasion": 0.35, "severity": "HIGH", "gap_score": 0.40},
-                {"detector": "jailbreak", "family": "roleplay_framing", "evasion": 0.22, "severity": "LOW", "gap_score": 0.25},
-                {"detector": "insecure_output", "family": "context_flooding", "evasion": 0.18, "severity": "LOW", "gap_score": 0.21},
+                {"detector": "injection", "family": "unicode_homograph", "evasion": 0.70, "severity": "CRITICAL"},
+                {"detector": "indirect_injection", "family": "html_comment_smuggling", "evasion": 0.35, "severity": "HIGH"},
+                {"detector": "jailbreak", "family": "roleplay_framing", "evasion": 0.22, "severity": "LOW"},
+                {"detector": "insecure_output", "family": "context_flooding", "evasion": 0.18, "severity": "LOW"},
             ],
             "retrain_priority": ["injection", "indirect_injection"],
         }, indent=2)
@@ -105,9 +116,13 @@ def analyze_weakness(analysis_input: str) -> str:
     weaknesses.sort(key=lambda x: x["evasion"], reverse=True)
     retrain_priority = list(dict.fromkeys(w["detector"] for w in weaknesses if w["severity"] in ("CRITICAL", "HIGH")))
 
+    # Strip unused fields — LLM only needs detector/family/evasion/severity to route
+    slim = [{"detector": w["detector"], "family": w["family"], "evasion": w["evasion"], "severity": w["severity"]}
+            for w in weaknesses]
+
     return json.dumps({
-        "round": report.get("round"),
-        "weaknesses": weaknesses,
+        "round": report.get("round") if report_path.exists() else None,
+        "weaknesses": slim,
         "retrain_priority": retrain_priority,
         "recommendation": f"Retrain {retrain_priority} — {sum(1 for w in weaknesses if w['severity']=='CRITICAL')} critical gaps.",
     }, indent=2)

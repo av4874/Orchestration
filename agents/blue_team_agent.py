@@ -46,7 +46,7 @@ def _make_llm():
         model="claude-haiku-4-5-20251001",
         api_key=os.environ.get("ANTHROPIC_API_KEY", ""),
         temperature=0.2,
-        max_tokens=1024,
+        max_tokens=512,
     )
 
 
@@ -143,15 +143,26 @@ def run(round_num: int, dry_run: bool):
                 "Step 3: send_message to red_team with feedback. "
                 "Step 4: send_message to orchestrator with vulnerability_report."
             ))]},
-            config={"recursion_limit": 15},
+            config={"recursion_limit": 10},
         )
 
         # Write compact session memory
         WORKSPACE.mkdir(parents=True, exist_ok=True)
+        # Read real severity from the message blue team just sent
+        orch_msg_path = WORKSPACE / "blue_to_orchestrator.json"
+        severity_saved, retrain_saved = "unknown", []
+        if orch_msg_path.exists():
+            try:
+                sent = json.loads(orch_msg_path.read_text(encoding="utf-8"))
+                body = sent.get("body", {})
+                severity_saved = body.get("severity", "unknown")
+                retrain_saved = body.get("retrain", [])
+            except Exception:
+                pass
         session_mem_path.write_text(json.dumps({
             "round": round_num,
-            "severity": "see blue_to_orchestrator.json",
-            "retrain": "see blue_to_orchestrator.json",
+            "severity": severity_saved,
+            "retrain": retrain_saved,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }, indent=2), encoding="utf-8")
 

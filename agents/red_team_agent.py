@@ -51,7 +51,7 @@ def _make_llm():
         model="claude-haiku-4-5-20251001",
         api_key=os.environ.get("ANTHROPIC_API_KEY", ""),
         temperature=0.3,
-        max_tokens=1024,
+        max_tokens=512,
     )
 
 
@@ -147,7 +147,7 @@ def run(round_num: int, dry_run: bool):
                 "Step 7: validate_samples. "
                 "Step 8: send_message to orchestrator."
             ))]},
-            config={"recursion_limit": 15},
+            config={"recursion_limit": 10},
         )
         messages = result["messages"]
         # Trim: keep only last 10 messages to avoid history bloat on next inspection
@@ -162,11 +162,20 @@ def run(round_num: int, dry_run: bool):
 
         # Write compact session memory for next round
         WORKSPACE.mkdir(parents=True, exist_ok=True)
+        # Extract family from last tool messages for real prior_context next round
+        family_used = "unknown"
+        for m in reversed(messages):
+            content = getattr(m, "content", "") or ""
+            if '"attack_family"' in content or '"family"' in content:
+                import re as _re
+                match = _re.search(r'"(?:attack_family|family)"\s*:\s*"([^"]+)"', content)
+                if match:
+                    family_used = match.group(1)
+                    break
         session_mem_path.write_text(json.dumps({
             "round": round_num,
-            "family_used": "see attack_memory.json",
-            "samples_count": 5,
-            "expected_evasion": 0.70,
+            "family_used": family_used,
+            "samples_count": len(messages),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }, indent=2), encoding="utf-8")
 
