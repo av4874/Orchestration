@@ -1,7 +1,7 @@
 {
   "from": "blue_team",
   "to": "orchestrator",
-  "round": 1,
+  "round": 2,
   "type": "vulnerability_report",
   "body": {
     "retrain": [
@@ -19,5 +19,5 @@
     "analysis_summary": "Injection detector evasion 70% via unicode_homograph \u2014 retrain priority HIGH."
   },
   "requires_response": false,
-  "timestamp": "2026-06-28T17:58:57.161638+00:00"
+  "timestamp": "2026-06-28T18:59:27.930608+00:00"
 }

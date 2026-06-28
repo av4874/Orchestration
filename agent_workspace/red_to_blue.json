@@ -1,13 +1,13 @@
 {
   "from": "red_team",
   "to": "blue_team",
-  "round": 1,
+  "round": 2,
   "type": "attack_proposal",
   "body": {
-    "family": "unicode_homograph",
+    "family": "context_flooding",
     "sample_count": 5,
     "expected_evasion": 0.7
   },
   "requires_response": true,
-  "timestamp": "2026-06-28T17:58:52.888383+00:00"
+  "timestamp": "2026-06-28T18:59:23.467372+00:00"
 }

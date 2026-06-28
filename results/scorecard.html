@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Adversarial Guardrail — Round 1 Scorecard</title>
+<title>Adversarial Guardrail — Round 2 Scorecard</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; line-height: 1.6; }
@@ -33,8 +33,8 @@
 </head>
 <body>
 <div class="container">
-  <h1>Adversarial Guardrail &mdash; Round 1 Scorecard</h1>
-  <div class="meta">Generated 2026-06-28 17:58 UTC &bull; Adversarial Guardrail Pipeline</div>
+  <h1>Adversarial Guardrail &mdash; Round 2 Scorecard</h1>
+  <div class="meta">Generated 2026-06-28 18:59 UTC &bull; Adversarial Guardrail Pipeline</div>
 
   <!-- Summary cards -->
   <div class="grid-3">
@@ -92,7 +92,20 @@
   <section>
     <h2>Round History</h2>
     
-    <div class="empty">No round history yet.</div>
+    <table>
+      <thead><tr><th>Round</th><th>Top Family</th><th>Detector</th><th>Evasion</th><th>Action</th></tr></thead>
+      <tbody>
+      
+      <tr>
+        <td><span class="history-round">1</span></td>
+        <td><span class="tag">unicode_homograph</span></td>
+        <td>injection</td>
+        <td style="font-weight:600; color: #16a34a">n/a</td>
+        <td><span class="tag"></span></td>
+      </tr>
+      
+      </tbody>
+    </table>
     
   </section>
 
@@ -102,11 +115,11 @@
     <table>
       <tr>
         <th>Current Focus</th>
-        <td><span class="tag">unicode_homograph</span><span class="tag">context_flooding</span></td>
+        <td><span class="tag">context_flooding</span><span class="tag">unicode_homograph</span></td>
       </tr>
       <tr>
         <th>Known Blind Spots</th>
-        <td><span class="tag">base64_encoding</span></td>
+        <td><span class="tag">base64_encoding</span><span class="tag">unicode_homograph</span></td>
       </tr>
     </table>
   </section>
