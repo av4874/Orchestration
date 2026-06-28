@@ -45,17 +45,13 @@ TOOLS (in order):
 Call tools only. Minimum 5 valid samples."""
 
 
-def _make_llm():
-    from langchain_anthropic import ChatAnthropic
-    return ChatAnthropic(
-        model="claude-haiku-4-5-20251001",
-        api_key=os.environ.get("ANTHROPIC_API_KEY", ""),
-        temperature=0.3,
-        max_tokens=512,
-    )
+def _make_llm(llm=None):
+    if llm is None:
+        raise RuntimeError("No LLM — pass llm= arg or use --dry-run")
+    return llm
 
 
-def run(round_num: int, dry_run: bool):
+def run(round_num: int, dry_run: bool, llm=None):
     TRACES_DIR = ENTERPRISE_ROOT / "agent_traces"
     TRACES_DIR.mkdir(exist_ok=True)
 
@@ -132,7 +128,7 @@ def run(round_num: int, dry_run: bool):
             except Exception:
                 pass
 
-        llm = _make_llm()
+        llm = _make_llm(llm)
         agent = create_react_agent(llm, TOOLS, prompt=SYSTEM_PROMPT)
         result = agent.invoke(
             {"messages": [HumanMessage(content=(
@@ -150,8 +146,6 @@ def run(round_num: int, dry_run: bool):
             config={"recursion_limit": 10},
         )
         messages = result["messages"]
-        # Trim: keep only last 10 messages to avoid history bloat on next inspection
-        trimmed_count = max(0, len(messages) - 10)
 
         trace = {
             "round": round_num, "mode": "live", "agent": "red_team",

@@ -14,7 +14,6 @@ pipeline {
     PHISHING_PROJECT_PATH = '/workspace/phshing-email'
     RESULTS_DIR = 'results'
     HF_TOKEN = credentials('hf-token')
-    ANTHROPIC_API_KEY = credentials('anthropic-api-key')
     GITHUB_TOKEN = credentials('github-token')
     GITHUB_REPO = credentials('github-repo')
     ADVERSARIAL_DATASET = 'Builder117/enterprise-adversarial-samples'
@@ -64,7 +63,7 @@ pipeline {
 
     stage('Orchestrator Agent') {
       steps {
-        sh "python agents/orchestrator_agent.py --round ${params.ROUND}"
+        sh "python pipeline/trigger_agents.py --agent orchestrator --round ${params.ROUND}"
 
         script {
           def decision = readJSON file: 'results/pipeline_decision.json'
@@ -112,6 +111,17 @@ pipeline {
             --round ${params.ROUND}
         """
         sh "pytest tests/test_retrain.py -v --tb=short"
+      }
+    }
+
+    stage('Download Retrained Models') {
+      when {
+        expression {
+          return env.AI_ACTION == 'retrain' || env.AI_ACTION == 'partial_retrain'
+        }
+      }
+      steps {
+        sh "python pipeline/download_models.py --round ${params.ROUND}"
       }
       post {
         success {

@@ -40,17 +40,13 @@ TOOLS (in order):
 JSON bodies only. Use real evasion scores."""
 
 
-def _make_llm():
-    from langchain_anthropic import ChatAnthropic
-    return ChatAnthropic(
-        model="claude-haiku-4-5-20251001",
-        api_key=os.environ.get("ANTHROPIC_API_KEY", ""),
-        temperature=0.2,
-        max_tokens=512,
-    )
+def _make_llm(llm=None):
+    if llm is None:
+        raise RuntimeError("No LLM — pass llm= arg or use --dry-run")
+    return llm
 
 
-def run(round_num: int, dry_run: bool):
+def run(round_num: int, dry_run: bool, llm=None):
     TRACES_DIR = ENTERPRISE_ROOT / "agent_traces"
     TRACES_DIR.mkdir(exist_ok=True)
 
@@ -65,7 +61,12 @@ def run(round_num: int, dry_run: bool):
             return result
 
         # Read Red Team proposal
-        step("read_message", read_message, json.dumps({"from": "red_team", "to": "blue_team"}))
+        red_msg_raw = step("read_message", read_message, json.dumps({"from": "red_team", "to": "blue_team"}))
+        try:
+            red_msg = json.loads(red_msg_raw)
+            family_used = red_msg.get("family", red_msg.get("top_family", "unicode_homograph"))
+        except Exception:
+            family_used = "unicode_homograph"
 
         # Analyze weakness (uses mock if no evasion_report)
         analysis_raw = step("analyze_weakness", analyze_weakness, json.dumps({"detector": "all"}))
@@ -87,10 +88,10 @@ def run(round_num: int, dry_run: bool):
             "from": "blue_team", "to": "red_team", "round": round_num,
             "type": "attack_feedback",
             "body": {
-                "feedback": "unicode_homograph targets real gap — injection detector weakest on homoglyph substitution.",
+                "feedback": f"{family_used} targets real gap — injection detector weakest on this technique.",
                 "focus": "injection",
                 "drop": [],
-                "strengthen": ["combine unicode_homograph with context_flooding for higher evasion"],
+                "strengthen": [f"combine {family_used} with context_flooding for higher evasion"],
             },
             "requires_response": False,
         }))
@@ -132,7 +133,7 @@ def run(round_num: int, dry_run: bool):
             except Exception:
                 pass
 
-        llm = _make_llm()
+        llm = _make_llm(llm)
         agent = create_react_agent(llm, TOOLS, prompt=SYSTEM_PROMPT)
         result = agent.invoke(
             {"messages": [HumanMessage(content=(

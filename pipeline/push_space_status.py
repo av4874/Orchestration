@@ -75,17 +75,88 @@ def build_status(round_num: int) -> dict:
     }
 
 
-def push_to_space(payload: dict, dry_run: bool) -> bool:
-    """Push pipeline_status.json to HF Space via git clone → write → commit → push."""
+LINEAGE_FILE = "model_lineage.json"
+
+
+def build_lineage_entry(round_num: int) -> dict | None:
+    """Build one round's lineage entry from local result files. Returns None if no retrain happened."""
+    retrain_path = RESULTS_DIR / "retrain_report.json"
+    if not retrain_path.exists():
+        return None
+    retrain = json.loads(retrain_path.read_text(encoding="utf-8"))
+    if retrain.get("action") in ("skip", "fast_promote") or not retrain.get("detectors_retrained"):
+        return None
+
+    evasion_path = RESULTS_DIR / "evasion_report.json"
+    pre_evasion = {}
+    attack_family = "unknown"
+    if evasion_path.exists():
+        er = json.loads(evasion_path.read_text(encoding="utf-8"))
+        for det, v in er.get("per_detector", {}).items():
+            pre_evasion[det] = round(v.get("evasion_rate", 0), 4)
+        attack_family = er.get("attack_family", "unknown")
+
+    decision_path = RESULTS_DIR / "pipeline_decision.json"
+    argo_workflow = "unknown"
+    if decision_path.exists():
+        d = json.loads(decision_path.read_text(encoding="utf-8"))
+        argo_workflow = d.get("argo_workflow", "unknown")
+
+    version = round_num + 3  # matches retrain.py VERSION_OFFSET
+    detectors_built = {}
+    for det in retrain.get("detectors_retrained", []):
+        base_id = {
+            "injection":          "Builder117/distilbert-prompt-injection",
+            "jailbreak":          "Builder117/distilbert-jailbreak",
+            "insecure_output":    "Builder117/distilbert-insecure-output",
+            "indirect_injection": "Builder117/distilbert-indirect-injection",
+        }.get(det, det)
+        detectors_built[det] = {
+            "pre_evasion": pre_evasion.get(det),
+            "post_evasion": retrain.get("post_evasion", {}).get(det),
+            "hf_model": f"{base_id}-v{version}",
+        }
+
+    return {
+        "round": round_num,
+        "hf_version": version,
+        "attack_family": attack_family,
+        "argo_workflow": argo_workflow,
+        "detectors": detectors_built,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def merge_lineage(existing_json: str | None, new_entry: dict) -> dict:
+    """Append new_entry to lineage, replacing any existing entry for same round."""
+    if existing_json:
+        try:
+            lineage = json.loads(existing_json)
+        except json.JSONDecodeError:
+            lineage = {"rounds": []}
+    else:
+        lineage = {"rounds": []}
+
+    lineage["rounds"] = [r for r in lineage["rounds"] if r.get("round") != new_entry["round"]]
+    lineage["rounds"].append(new_entry)
+    lineage["rounds"].sort(key=lambda r: r["round"])
+    return lineage
+
+
+def push_to_space(payload: dict, dry_run: bool, round_num: int) -> bool:
+    """Push pipeline_status.json (and model_lineage.json if retrain happened) to HF Space."""
     import shutil
     import subprocess
     import tempfile
 
-    content = json.dumps(payload, indent=2)
+    status_content = json.dumps(payload, indent=2)
+    lineage_entry = build_lineage_entry(round_num)
 
     if dry_run:
         print(f"[DRY-RUN] Would push to {SPACE_REPO}/{SPACE_FILE}:")
-        print(content[:500])
+        print(status_content[:400])
+        if lineage_entry:
+            print(f"[DRY-RUN] Would append to {LINEAGE_FILE}: round {lineage_entry['round']}, family={lineage_entry['attack_family']}")
         return True
 
     if not HF_TOKEN:
@@ -102,31 +173,32 @@ def push_to_space(payload: dict, dry_run: bool) -> bool:
             check=True, capture_output=True, timeout=60,
         )
 
-        # Write updated status file
-        (tmp_dir / SPACE_FILE).write_text(content, encoding="utf-8")
+        (tmp_dir / SPACE_FILE).write_text(status_content, encoding="utf-8")
 
-        # Commit and push
+        if lineage_entry:
+            existing_path = tmp_dir / LINEAGE_FILE
+            existing = existing_path.read_text(encoding="utf-8") if existing_path.exists() else None
+            lineage = merge_lineage(existing, lineage_entry)
+            existing_path.write_text(json.dumps(lineage, indent=2), encoding="utf-8")
+            print(f"[Space] model_lineage.json updated — {len(lineage['rounds'])} rounds tracked")
+
         env = {**os.environ, "GIT_AUTHOR_NAME": "pipeline", "GIT_AUTHOR_EMAIL": "pipeline@guardrail",
                "GIT_COMMITTER_NAME": "pipeline", "GIT_COMMITTER_EMAIL": "pipeline@guardrail"}
 
-        subprocess.run(["git", "add", SPACE_FILE], check=True, cwd=tmp_dir, capture_output=True)
-        result = subprocess.run(
-            ["git", "diff", "--cached", "--quiet"],
-            cwd=tmp_dir, capture_output=True,
-        )
+        files_to_add = [SPACE_FILE] + ([LINEAGE_FILE] if lineage_entry else [])
+        subprocess.run(["git", "add"] + files_to_add, check=True, cwd=tmp_dir, capture_output=True)
+
+        result = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=tmp_dir, capture_output=True)
         if result.returncode == 0:
-            print("[Space] No changes to pipeline_status.json — skipping push")
+            print("[Space] No changes — skipping push")
             return True
 
         subprocess.run(
-            ["git", "commit", "-m", f"chore: update pipeline_status.json round {payload['round']}"],
+            ["git", "commit", "-m", f"chore: update dashboard round {payload['round']}"],
             check=True, cwd=tmp_dir, capture_output=True, env=env,
         )
-        subprocess.run(
-            ["git", "push"],
-            check=True, cwd=tmp_dir, capture_output=True, timeout=60,
-        )
-        print(f"[Space] pipeline_status.json pushed — round {payload['round']}")
+        subprocess.run(["git", "push"], check=True, cwd=tmp_dir, capture_output=True, timeout=60)
+        print(f"[Space] Pushed — round {payload['round']}")
         return True
 
     except subprocess.CalledProcessError as e:
@@ -144,7 +216,7 @@ def main():
 
     payload = build_status(args.round)
     print(f"[Space] Built status for round {args.round}: status={payload['status']}")
-    success = push_to_space(payload, args.dry_run)
+    success = push_to_space(payload, args.dry_run, args.round)
     sys.exit(0 if success else 1)
 
 

@@ -54,17 +54,13 @@ TOOLS (in order):
 Ground decisions in numbers. No repeated tool calls."""
 
 
-def _make_llm():
-    from langchain_anthropic import ChatAnthropic
-    return ChatAnthropic(
-        model="claude-haiku-4-5-20251001",
-        api_key=os.environ.get("ANTHROPIC_API_KEY", ""),
-        temperature=0.1,
-        max_tokens=512,
-    )
+def _make_llm(llm=None):
+    if llm is None:
+        raise RuntimeError("No LLM — pass llm= arg or use --dry-run")
+    return llm
 
 
-def run(round_num: int, dry_run: bool):
+def run(round_num: int, dry_run: bool, llm=None):
     TRACES_DIR = ENTERPRISE_ROOT / "agent_traces"
     TRACES_DIR.mkdir(exist_ok=True)
 
@@ -115,10 +111,9 @@ def run(round_num: int, dry_run: bool):
         confidence = 0.91 if top_evasion >= 0.40 else 0.72
 
         # Rotate families: used family moves to known_blind_spots, next family takes focus
-        import json as _json
         from agents.tools.memory_tools import MEMORY_PATH
         try:
-            mem = _json.loads(MEMORY_PATH.read_text(encoding="utf-8")) if MEMORY_PATH.exists() else {}
+            mem = json.loads(MEMORY_PATH.read_text(encoding="utf-8")) if MEMORY_PATH.exists() else {}
         except Exception:
             mem = {}
         current_focus = mem.get("current_focus", [])
@@ -196,7 +191,7 @@ def run(round_num: int, dry_run: bool):
             except Exception:
                 pass
 
-        llm = _make_llm()
+        llm = _make_llm(llm)
         agent = create_react_agent(llm, TOOLS, prompt=SYSTEM_PROMPT)
         result = agent.invoke(
             {"messages": [HumanMessage(content=(
@@ -215,16 +210,14 @@ def run(round_num: int, dry_run: bool):
 
         # Write compact session memory
         WORKSPACE.mkdir(parents=True, exist_ok=True)
-        # Read real routing decision from attack_memory.json last round entry
         action_saved, severity_saved, workflow_saved = "unknown", "unknown", "unknown"
         try:
-            from agents.tools.memory_tools import MEMORY_PATH
-            if MEMORY_PATH.exists():
-                mem = json.loads(MEMORY_PATH.read_text(encoding="utf-8"))
-                last = mem.get("rounds", [{}])[-1]
-                action_saved = last.get("action", "unknown")
-                severity_saved = last.get("evasion", "unknown")
-                workflow_saved = last.get("top_family", "unknown")
+            decision_path = ENTERPRISE_ROOT / "results" / "pipeline_decision.json"
+            if decision_path.exists():
+                dec = json.loads(decision_path.read_text(encoding="utf-8"))
+                action_saved = dec.get("action", "unknown")
+                severity_saved = dec.get("severity", "unknown")
+                workflow_saved = dec.get("argo_workflow", "unknown")
         except Exception:
             pass
         session_mem_path.write_text(json.dumps({

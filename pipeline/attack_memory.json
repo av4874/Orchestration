@@ -1,86 +1,10 @@
 {
-  "rounds": [
-    {
-      "round": 1,
-      "timestamp": "2026-06-22T19:25:46.933472+00:00",
-      "top_family": "base64_encoding",
-      "detector": "injection",
-      "evasion": 0.998,
-      "action": "skip",
-      "notes": "base64_encoding DEAD \u2014 detector trained on it, always scores 0.998. Abandoned."
-    },
-    {
-      "round": 6,
-      "timestamp": "2026-06-24T10:50:19.954616+00:00",
-      "top_family": "unicode_homograph",
-      "detector": "injection",
-      "evasion": null,
-      "action": "pending",
-      "notes": "unicode_homograph selected. HF Inference API 401 blocked generation \u2014 switching to dataset pull."
-    },
-    {
-      "round": 11,
-      "timestamp": "2026-06-24T15:06:18.549539+00:00",
-      "top_family": "unicode_homograph",
-      "detector": "injection",
-      "evasion": 0.35,
-      "action": "partial_retrain",
-      "notes": "Round 11: unicode_homograph caught 35% \u2014 retrain queued."
-    },
-    {
-      "round": 1,
-      "timestamp": "2026-06-24T18:10:02.757520+00:00",
-      "top_family": "unicode_homograph",
-      "detector": "injection",
-      "evasion": 0.75,
-      "action": "retrain",
-      "notes": "Round 1: unicode_homograph caught 75% \u2014 retrain queued."
-    },
-    {
-      "round": 1,
-      "timestamp": "2026-06-24T18:37:08.312587+00:00",
-      "top_family": "unicode_homograph",
-      "detector": "injection",
-      "evasion": 0.75,
-      "action": "retrain",
-      "notes": "Round 1: unicode_homograph caught 75% \u2014 retrain queued."
-    },
-    {
-      "round": 1,
-      "timestamp": "2026-06-25T16:34:58.878921+00:00",
-      "top_family": "unicode_homograph",
-      "detector": "injection",
-      "evasion": 0.71,
-      "action": "retrain",
-      "notes": "Round 1: unicode_homograph caught 71% \u2014 retrain queued."
-    },
-    {
-      "round": 1,
-      "timestamp": "2026-06-25T16:40:18.229560+00:00",
-      "top_family": "fragmented_instruction",
-      "detector": "injection",
-      "evasion": 0.75,
-      "action": "retrain",
-      "notes": "Round 1: fragmented_instruction evasion 75% on injection \u2014 retrain queued."
-    },
-    {
-      "round": 2,
-      "timestamp": "2026-06-25T18:16:09.692269+00:00",
-      "top_family": "context_flooding",
-      "detector": "injection",
-      "evasion": 0.8,
-      "action": "retrain",
-      "notes": "Round 2: context_flooding evasion 80% on injection \u2014 retrain queued."
-    }
-  ],
+  "rounds": [],
   "current_focus": [
-    "multilingual",
-    "roleplay_framing"
+    "unicode_homograph",
+    "context_flooding"
   ],
   "known_blind_spots": [
-    "base64_encoding",
-    "context_flooding",
-    "fragmented_instruction",
-    "unicode_homograph"
+    "base64_encoding"
   ]
 }
