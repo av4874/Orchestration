@@ -173,6 +173,15 @@ jobs:
           print("PR body written.")
           PYEOF
 
+      - name: Copy artifacts to workspace paths
+        env:
+          ROUND: ${{ needs.agent-attack-cycle.outputs.round }}
+        run: |
+          mkdir -p results agent_traces agent_workspace
+          cp -r downloaded/results/. results/ 2>/dev/null || true
+          cp -r downloaded/agent_traces/. agent_traces/ 2>/dev/null || true
+          cp -r downloaded/agent_workspace/. agent_workspace/ 2>/dev/null || true
+
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
