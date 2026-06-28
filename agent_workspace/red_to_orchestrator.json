@@ -1,0 +1,16 @@
+{
+  "from": "red_team",
+  "to": "orchestrator",
+  "round": 1,
+  "type": "final_report",
+  "body": {
+    "families_tried": [
+      "unicode_homograph"
+    ],
+    "samples_generated": 5,
+    "expected_evasion": 0.7,
+    "top_family": "unicode_homograph"
+  },
+  "requires_response": false,
+  "timestamp": "2026-06-28T17:58:52.889175+00:00"
+}

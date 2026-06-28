@@ -1,0 +1,23 @@
+{
+  "from": "blue_team",
+  "to": "orchestrator",
+  "round": 1,
+  "type": "vulnerability_report",
+  "body": {
+    "retrain": [
+      "injection",
+      "indirect_injection"
+    ],
+    "severity": "high",
+    "weakness_scores": {
+      "injection": 0.7,
+      "jailbreak": 0.22,
+      "insecure_output": 0.18,
+      "indirect_injection": 0.35
+    },
+    "recommended_argo_workflow": "full-canary",
+    "analysis_summary": "Injection detector evasion 70% via unicode_homograph \u2014 retrain priority HIGH."
+  },
+  "requires_response": false,
+  "timestamp": "2026-06-28T17:58:57.161638+00:00"
+}

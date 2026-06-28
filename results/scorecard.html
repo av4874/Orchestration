@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Adversarial Guardrail — Round 1 Scorecard</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; line-height: 1.6; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
+  h1 { font-size: 1.75rem; font-weight: 700; color: #f1f5f9; margin-bottom: 0.25rem; }
+  .meta { color: #94a3b8; font-size: 0.85rem; margin-bottom: 2rem; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2rem; }
+  .card { background: #1e293b; border: 1px solid #334155; border-radius: 0.75rem; padding: 1.25rem; }
+  .card-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; margin-bottom: 0.5rem; }
+  .card-value { font-size: 2rem; font-weight: 700; }
+  .card-sub { font-size: 0.8rem; color: #64748b; margin-top: 0.25rem; }
+  .severity-badge { display: inline-block; padding: 0.2rem 0.75rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; background: #6b728022; color: #6b7280; border: 1px solid #6b728055; }
+  section { margin-bottom: 2.5rem; }
+  section h2 { font-size: 1.1rem; font-weight: 600; color: #cbd5e1; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; margin-bottom: 1rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+  th { text-align: left; padding: 0.5rem 0.75rem; color: #94a3b8; font-weight: 500; border-bottom: 1px solid #334155; }
+  td { padding: 0.6rem 0.75rem; border-bottom: 1px solid #1e293b; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #1e293b88; }
+  .bar-wrap { background: #0f172a; border-radius: 9999px; height: 8px; width: 120px; }
+  .bar { height: 8px; border-radius: 9999px; }
+  .tag { display: inline-block; background: #334155; border-radius: 0.25rem; padding: 0.1rem 0.4rem; font-size: 0.75rem; font-family: monospace; margin: 0.1rem; }
+  .reason-box { background: #1e293b; border-left: 3px solid #3b82f6; border-radius: 0 0.5rem 0.5rem 0; padding: 0.75rem 1rem; font-size: 0.875rem; color: #cbd5e1; margin-top: 0.75rem; }
+  .history-round { display: inline-block; width: 2rem; height: 2rem; border-radius: 50%; background: #334155; text-align: center; line-height: 2rem; font-size: 0.75rem; font-weight: 600; margin-right: 0.5rem; }
+  .empty { color: #475569; font-style: italic; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Adversarial Guardrail &mdash; Round 1 Scorecard</h1>
+  <div class="meta">Generated 2026-06-28 17:58 UTC &bull; Adversarial Guardrail Pipeline</div>
+
+  <!-- Summary cards -->
+  <div class="grid-3">
+    <div class="card">
+      <div class="card-title">Overall Evasion Rate</div>
+      <div class="card-value" style="color: #16a34a">0.0%</div>
+      <div class="card-sub">across all detectors</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Severity</div>
+      <div class="card-value" style="font-size:1.4rem; margin-top:0.25rem;"><span class="severity-badge">none</span></div>
+      <div class="card-sub">Orchestrator assessment</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Pipeline Action</div>
+      <div class="card-value" style="font-size:1.2rem; margin-top:0.3rem;">n/a</div>
+      <div class="card-sub">Argo: n/a</div>
+    </div>
+  </div>
+
+  <!-- Orchestrator decision -->
+  <section>
+    <h2>Orchestrator Decision</h2>
+    <table>
+      <tr><th>Field</th><th>Value</th></tr>
+      <tr><td>Action</td><td><span class="tag">n/a</span></td></tr>
+      <tr><td>Argo Workflow</td><td><span class="tag">n/a</span></td></tr>
+      <tr><td>Confidence</td><td>n/a</td></tr>
+      <tr><td>Models to retrain</td><td>
+        
+          <span class="empty">none</span>
+        
+      </td></tr>
+    </table>
+    
+  </section>
+
+  <!-- Per-detector evasion -->
+  <section>
+    <h2>Per-Detector Evasion</h2>
+    
+    <div class="empty">No evasion data available yet.</div>
+    
+  </section>
+
+  <!-- Per-family breakdown -->
+  <section>
+    <h2>Attack Family Breakdown</h2>
+    
+    <div class="empty">No family breakdown available yet.</div>
+    
+  </section>
+
+  <!-- Round history -->
+  <section>
+    <h2>Round History</h2>
+    
+    <div class="empty">No round history yet.</div>
+    
+  </section>
+
+  <!-- Agent focus -->
+  <section>
+    <h2>Agent Intelligence</h2>
+    <table>
+      <tr>
+        <th>Current Focus</th>
+        <td><span class="tag">unicode_homograph</span><span class="tag">context_flooding</span></td>
+      </tr>
+      <tr>
+        <th>Known Blind Spots</th>
+        <td><span class="tag">base64_encoding</span></td>
+      </tr>
+    </table>
+  </section>
+
+</div>
+</body>
+</html>
