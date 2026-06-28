@@ -163,7 +163,8 @@ def push_to_space(payload: dict, dry_run: bool, round_num: int) -> bool:
         print("ERROR: HF_TOKEN not set — cannot push to Space")
         return False
 
-    clone_url = f"https://user:{HF_TOKEN}@huggingface.co/spaces/{SPACE_REPO}"
+    hf_user = SPACE_REPO.split("/")[0]
+    clone_url = f"https://{hf_user}:{HF_TOKEN}@huggingface.co/spaces/{SPACE_REPO}"
     tmp_dir = Path(tempfile.mkdtemp(prefix="hf_space_"))
 
     try:

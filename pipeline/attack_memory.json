@@ -1,10 +1,21 @@
 {
-  "rounds": [],
+  "rounds": [
+    {
+      "round": 1,
+      "timestamp": "2026-06-28T17:58:52.889175+00:00",
+      "families_tried": ["unicode_homograph"],
+      "samples_generated": 5,
+      "expected_evasion": 0.7,
+      "top_family": "unicode_homograph",
+      "detector": "injection"
+    }
+  ],
   "current_focus": [
-    "unicode_homograph",
-    "context_flooding"
+    "context_flooding",
+    "unicode_homograph"
   ],
   "known_blind_spots": [
-    "base64_encoding"
+    "base64_encoding",
+    "unicode_homograph"
   ]
 }
