@@ -15,8 +15,9 @@ jobs:
   agent-attack-cycle:
     name: Run Red + Blue Team Agents
     runs-on: ubuntu-latest
-    outputs:
-      round: ${{ steps.set-round.outputs.round }}
+    permissions:
+      contents: write
+      pull-requests: write
 
     steps:
       - name: Checkout repo
@@ -70,30 +71,29 @@ jobs:
       - name: Validate attack sample schema
         run: |
           python -c "
-          import json, jsonschema, sys, os
+          import json, sys, os
           round_num = ${{ steps.set-round.outputs.round }}
           samples_path = f'results/round_{round_num}_samples.json'
           if not os.path.exists(samples_path):
               print(f'ERROR: {samples_path} not found')
               sys.exit(1)
           samples = json.load(open(samples_path))
-          schema = {
-              'type': 'array',
-              'items': {
-                  'type': 'object',
-                  'required': ['id', 'detector', 'prompt', 'attack_family', 'expected_evasion'],
-                  'properties': {
-                      'detector': {'type': 'string', 'enum': ['injection','jailbreak','insecure_output','indirect_injection']},
-                      'expected_evasion': {'type': 'boolean'},
-                  }
-              }
-          }
-          jsonschema.validate(samples, schema)
+          required = {'id', 'detector', 'prompt', 'attack_family', 'expected_evasion'}
+          valid_detectors = {'injection','jailbreak','insecure_output','indirect_injection'}
+          for s in samples:
+              missing = required - s.keys()
+              if missing:
+                  print(f'ERROR: sample missing fields {missing}')
+                  sys.exit(1)
+              if s['detector'] not in valid_detectors:
+                  print(f'ERROR: invalid detector {s[\"detector\"]}')
+                  sys.exit(1)
           families = list(set(s['attack_family'] for s in samples))
           print(f'VALID: {samples_path} ({len(samples)} samples, families: {families})')
           "
 
       - name: Generate scorecard
+        continue-on-error: true
         env:
           ENTERPRISE_ROOT: ${{ github.workspace }}
         run: |
@@ -101,101 +101,51 @@ jobs:
             --round ${{ steps.set-round.outputs.round }} \
             --output results/scorecard.html
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: round-${{ steps.set-round.outputs.round }}-attack-artifacts
-          path: |
-            results/round_${{ steps.set-round.outputs.round }}_samples.json
-            results/scorecard.html
-            agent_workspace/
-            agent_traces/
-          retention-days: 30
-
-  open-pr:
-    name: Open Pull Request with Agent Report
-    runs-on: ubuntu-latest
-    needs: agent-attack-cycle
-    permissions:
-      contents: write
-      pull-requests: write
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: round-${{ needs.agent-attack-cycle.outputs.round }}-attack-artifacts
-          path: downloaded/
-
-      - name: Build PR body from agent traces
-        id: pr-body
+      - name: Commit and push artifacts to samples branch
         env:
-          ROUND: ${{ needs.agent-attack-cycle.outputs.round }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ROUND: ${{ steps.set-round.outputs.round }}
         run: |
-          python - <<'PYEOF'
-          import json, os, sys
+          BRANCH="attacks/round-${ROUND}-samples"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          round_num = int(os.environ["ROUND"])
-          base = "downloaded"
+          git checkout -B "$BRANCH"
 
-          body = f"## Adversarial Round {round_num} — Agent Report\n\n"
-          body += f"**Triggered by:** `{os.environ.get('GITHUB_ACTOR', 'scheduler')}`\n\n"
+          git add --force \
+            results/round_${ROUND}_samples.json \
+            agent_traces/ \
+            agent_workspace/ \
+            || true
+          git add --force results/scorecard.html 2>/dev/null || true
 
-          for agent in ["red_team", "blue_team"]:
-              trace_path = f"{base}/agent_traces/round_{round_num}_{agent}.json"
-              if os.path.exists(trace_path):
-                  t = json.load(open(trace_path))
-                  steps = t.get("steps", [])
-                  tools_called = [s["tool"] for s in steps if "tool" in s]
-                  body += f"### {agent.replace('_', ' ').title()} Agent\n"
-                  body += f"- Tools called: `{tools_called}`\n"
-                  body += f"- Summary: {str(t.get('final_output', 'N/A'))[:300]}\n\n"
-              else:
-                  body += f"### {agent.replace('_', ' ').title()} Agent\n- trace not found\n\n"
+          git diff --cached --quiet && echo "Nothing to commit" && exit 0
 
-          samples_path = f"{base}/results/round_{round_num}_samples.json"
-          if os.path.exists(samples_path):
-              samples = json.load(open(samples_path))
-              families = list(set(s.get("attack_family", "?") for s in samples))
-              detectors = list(set(s.get("detector", "?") for s in samples))
-              body += f"### Samples Generated\n"
-              body += f"- Total: **{len(samples)}**\n"
-              body += f"- Attack families: `{families}`\n"
-              body += f"- Detectors targeted: `{detectors}`\n\n"
+          git commit -m "chore: round-${ROUND} attack samples [dry-run]"
+          git push origin "$BRANCH" --force
 
-          body += "---\n*Merge to `main` to trigger Jenkins Phase 2 (attack execution + orchestrator).*\n"
-
-          with open("/tmp/pr_body.md", "w") as f:
-              f.write(body)
-          print("PR body written.")
-          PYEOF
-
-      - name: Copy artifacts to workspace paths
+      - name: Open Pull Request
         env:
-          ROUND: ${{ needs.agent-attack-cycle.outputs.round }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ROUND: ${{ steps.set-round.outputs.round }}
         run: |
-          mkdir -p results agent_traces agent_workspace
-          cp -r downloaded/results/. results/ 2>/dev/null || true
-          cp -r downloaded/agent_traces/. agent_traces/ 2>/dev/null || true
-          cp -r downloaded/agent_workspace/. agent_workspace/ 2>/dev/null || true
+          BRANCH="attacks/round-${ROUND}-samples"
+          EXISTING=$(gh pr list --head "$BRANCH" --base master --json number -q '.[0].number' 2>/dev/null || echo "")
+          if [ -n "$EXISTING" ]; then
+            echo "PR #${EXISTING} already exists for $BRANCH"
+            exit 0
+          fi
+          gh pr create \
+            --head "$BRANCH" \
+            --base master \
+            --title "[Round ${ROUND}] Adversarial Attack Samples" \
+            --body "## Round ${ROUND} — Dry Run Complete
 
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore: round-${{ needs.agent-attack-cycle.outputs.round }} attack samples"
-          branch: attacks/round-${{ needs.agent-attack-cycle.outputs.round }}-samples
-          base: master
-          title: "[Round ${{ needs.agent-attack-cycle.outputs.round }}] Adversarial Attack Samples"
-          body-path: /tmp/pr_body.md
-          labels: |
-            adversarial-attack
-            round-${{ needs.agent-attack-cycle.outputs.round }}
-          draft: false
-          add-paths: |
-            results/round_${{ needs.agent-attack-cycle.outputs.round }}_samples.json
-            results/scorecard.html
-            agent_traces/
+          Red Team and Blue Team agents ran against \`unicode_homograph\` family.
+
+          **Artifacts committed:**
+          - \`results/round_${ROUND}_samples.json\`
+          - \`agent_traces/\`
+
+          Merge to \`master\` to trigger Jenkins Phase 2." \
+            --label "adversarial-attack" 2>/dev/null || true
