@@ -1,0 +1,171 @@
+name: Attack Test — Phase 2
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'results/round_*_samples.json'
+  workflow_dispatch:
+    inputs:
+      round:
+        description: 'Round number'
+        required: false
+        default: ''
+
+jobs:
+  attack-test:
+    name: Test Samples + Orchestrator Decision
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - run: pip install -r requirements.txt
+
+      - name: Detect round number
+        id: set-round
+        run: |
+          if [ -n "${{ github.event.inputs.round }}" ]; then
+            ROUND="${{ github.event.inputs.round }}"
+          else
+            ROUND=$(python -c "
+          import glob, os
+          files = sorted(glob.glob('results/round_*_samples.json'))
+          print(files[-1].split('_')[1]) if files else print(1)
+          ")
+          fi
+          echo "round=$ROUND" >> $GITHUB_OUTPUT
+          echo "Round: $ROUND"
+
+      - name: Run attack tests — all detectors (dry-run)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          ENTERPRISE_ROOT: ${{ github.workspace }}
+        run: |
+          for DETECTOR in injection jailbreak insecure_output indirect_injection; do
+            echo "--- Testing $DETECTOR ---"
+            python pipeline/run_attacks.py \
+              --samples results/round_${{ steps.set-round.outputs.round }}_samples.json \
+              --detector $DETECTOR \
+              --round ${{ steps.set-round.outputs.round }} \
+              --dry-run
+          done
+
+      - name: Merge results into evasion report
+        env:
+          ENTERPRISE_ROOT: ${{ github.workspace }}
+        run: python pipeline/merge_results.py --round ${{ steps.set-round.outputs.round }}
+
+      - name: Run Orchestrator Agent (dry-run)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          ENTERPRISE_ROOT: ${{ github.workspace }}
+        run: python agents/orchestrator_agent.py --round ${{ steps.set-round.outputs.round }} --dry-run
+
+      - name: Show orchestrator decision
+        run: |
+          echo "--- pipeline_decision.json ---"
+          cat results/pipeline_decision.json
+
+      - name: Trigger Kaggle retraining (if retrain decision)
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          ENTERPRISE_ROOT: ${{ github.workspace }}
+        run: |
+          ACTION=$(python -c "import json; print(json.load(open('results/pipeline_decision.json'))['action'])")
+          echo "Orchestrator action: $ACTION"
+          if [ "$ACTION" = "retrain" ] || [ "$ACTION" = "partial_retrain" ]; then
+            echo "Triggering Kaggle retraining..."
+            python pipeline/retrain.py \
+              --decision results/pipeline_decision.json \
+              --round ${{ steps.set-round.outputs.round }} \
+              --dry-run
+          else
+            echo "No retraining needed (action=$ACTION)"
+          fi
+
+      - name: Update attack_memory with round results
+        env:
+          ENTERPRISE_ROOT: ${{ github.workspace }}
+        run: |
+          python -c "
+          import json, glob, os
+          from pathlib import Path
+          from datetime import datetime, timezone
+
+          mem_path = Path('pipeline/attack_memory.json')
+          m = json.loads(mem_path.read_text())
+
+          round_num = ${{ steps.set-round.outputs.round }}
+
+          # Read what happened this round
+          evasion_path = Path('results/evasion_report.json')
+          decision_path = Path('results/pipeline_decision.json')
+
+          families_tried = []
+          top_family = 'unknown'
+          red_path = Path('agent_workspace/red_to_orchestrator.json')
+          if red_path.exists():
+              red = json.loads(red_path.read_text())
+              families_tried = red['body'].get('families_tried', [])
+              top_family = red['body'].get('top_family', 'unknown')
+
+          evasion_rate = 0.0
+          if evasion_path.exists():
+              er = json.loads(evasion_path.read_text())
+              rates = [v.get('evasion_rate', 0) for v in er.get('per_detector', {}).values()]
+              evasion_rate = max(rates) if rates else 0.0
+
+          action = 'skip'
+          if decision_path.exists():
+              action = json.loads(decision_path.read_text()).get('action', 'skip')
+
+          # Remove existing entry for this round then append
+          m['rounds'] = [r for r in m.get('rounds', []) if r.get('round') != round_num]
+          m['rounds'].append({
+              'round': round_num,
+              'timestamp': datetime.now(timezone.utc).isoformat(),
+              'families_tried': families_tried,
+              'top_family': top_family,
+              'evasion_rate': round(evasion_rate, 4),
+              'action': action,
+          })
+          m['rounds'].sort(key=lambda r: r['round'])
+
+          # Move top_family to known_blind_spots, advance current_focus
+          if top_family and top_family not in m.get('known_blind_spots', []):
+              if evasion_rate < 0.3:  # detector handled it — no longer a focus
+                  m.setdefault('known_blind_spots', []).append(top_family)
+
+          mem_path.write_text(json.dumps(m, indent=2))
+          print(f'attack_memory updated — round {round_num}, action={action}, evasion={evasion_rate:.2%}')
+          "
+
+      - name: Commit phase 2 results to master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ROUND: ${{ steps.set-round.outputs.round }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add --force \
+            results/evasion_report.json \
+            results/pipeline_decision.json \
+            results/pipeline_env.sh \
+            results/retrain_report.json \
+            agent_traces/ \
+            pipeline/attack_memory.json \
+            2>/dev/null || true
+          git diff --cached --quiet && echo "Nothing to commit" && exit 0
+          git commit -m "chore: round-${ROUND} phase2 — evasion scored, orchestrator decided"
+          git push origin master
