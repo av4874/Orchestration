@@ -135,17 +135,9 @@ jobs:
             echo "PR #${EXISTING} already exists for $BRANCH"
             exit 0
           fi
+          printf 'Round %s dry-run complete. Artifacts: results/round_%s_samples.json, agent_traces/. Merge to master for Jenkins Phase 2.' "$ROUND" "$ROUND" > /tmp/pr_body.md
           gh pr create \
             --head "$BRANCH" \
             --base master \
             --title "[Round ${ROUND}] Adversarial Attack Samples" \
-            --body "## Round ${ROUND} — Dry Run Complete
-
-          Red Team and Blue Team agents ran against \`unicode_homograph\` family.
-
-          **Artifacts committed:**
-          - \`results/round_${ROUND}_samples.json\`
-          - \`agent_traces/\`
-
-          Merge to \`master\` to trigger Jenkins Phase 2." \
-            --label "adversarial-attack" 2>/dev/null || true
+            --body-file /tmp/pr_body.md
