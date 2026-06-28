@@ -6,8 +6,12 @@ pipeline {
     }
   }
 
+  triggers {
+    githubPush()
+  }
+
   parameters {
-    string(name: 'ROUND', defaultValue: '1', description: 'Attack round number')
+    string(name: 'ROUND', defaultValue: '', description: 'Attack round number (leave blank to auto-detect from results/)')
   }
 
   environment {
@@ -21,11 +25,42 @@ pipeline {
 
   stages {
 
+    stage('Detect Round') {
+      steps {
+        script {
+          if (params.ROUND?.trim()) {
+            env.ROUND = params.ROUND.trim()
+          } else {
+            env.ROUND = sh(
+              script: '''python3 -c "
+import json, os, glob
+files = sorted(glob.glob('results/round_*_samples.json'))
+if files:
+    latest = files[-1]
+    print(latest.split('_')[1])
+else:
+    import json as j
+    mem = 'pipeline/attack_memory.json'
+    if os.path.exists(mem):
+        m = j.load(open(mem))
+        rounds = m.get('rounds', [])
+        print(rounds[-1]['round'] if rounds else 1)
+    else:
+        print(1)
+"''',
+              returnStdout: true
+            ).trim()
+          }
+          echo "Round: ${env.ROUND}"
+        }
+      }
+    }
+
     stage('Download Artifacts') {
       steps {
         sh """
           mkdir -p results agent_workspace agent_traces
-          python pipeline/download_artifact.py --round ${params.ROUND}
+          python pipeline/download_artifact.py --round ${env.ROUND}
         """
       }
     }
@@ -34,22 +69,22 @@ pipeline {
       parallel {
         stage('Injection') {
           steps {
-            sh "python pipeline/run_attacks.py --samples results/round_${params.ROUND}_samples.json --detector injection --round ${params.ROUND}"
+            sh "python pipeline/run_attacks.py --samples results/round_${env.ROUND}_samples.json --detector injection --round ${env.ROUND}"
           }
         }
         stage('Jailbreak') {
           steps {
-            sh "python pipeline/run_attacks.py --samples results/round_${params.ROUND}_samples.json --detector jailbreak --round ${params.ROUND}"
+            sh "python pipeline/run_attacks.py --samples results/round_${env.ROUND}_samples.json --detector jailbreak --round ${env.ROUND}"
           }
         }
         stage('Insecure Output') {
           steps {
-            sh "python pipeline/run_attacks.py --samples results/round_${params.ROUND}_samples.json --detector insecure_output --round ${params.ROUND}"
+            sh "python pipeline/run_attacks.py --samples results/round_${env.ROUND}_samples.json --detector insecure_output --round ${env.ROUND}"
           }
         }
         stage('Indirect Injection') {
           steps {
-            sh "python pipeline/run_attacks.py --samples results/round_${params.ROUND}_samples.json --detector indirect_injection --round ${params.ROUND}"
+            sh "python pipeline/run_attacks.py --samples results/round_${env.ROUND}_samples.json --detector indirect_injection --round ${env.ROUND}"
           }
         }
       }
@@ -57,13 +92,13 @@ pipeline {
 
     stage('Merge + Score') {
       steps {
-        sh "python pipeline/merge_results.py --round ${params.ROUND}"
+        sh "python pipeline/merge_results.py --round ${env.ROUND}"
       }
     }
 
     stage('Orchestrator Agent') {
       steps {
-        sh "python pipeline/trigger_agents.py --agent orchestrator --round ${params.ROUND}"
+        sh "python pipeline/trigger_agents.py --agent orchestrator --round ${env.ROUND}"
 
         script {
           def decision = readJSON file: 'results/pipeline_decision.json'
@@ -82,7 +117,7 @@ pipeline {
 
     stage('Push Space Status') {
       steps {
-        sh "python pipeline/push_space_status.py --round ${params.ROUND}"
+        sh "python pipeline/push_space_status.py --round ${env.ROUND}"
       }
     }
 
@@ -94,7 +129,7 @@ pipeline {
 
     stage('Scorecard') {
       steps {
-        sh "python reporting/scorecard.py --round ${params.ROUND} --output results/scorecard.html"
+        sh "python reporting/scorecard.py --round ${env.ROUND} --output results/scorecard.html"
       }
     }
 
@@ -108,7 +143,7 @@ pipeline {
         sh """
           python pipeline/retrain.py \
             --decision results/pipeline_decision.json \
-            --round ${params.ROUND}
+            --round ${env.ROUND}
         """
         sh "pytest tests/test_retrain.py -v --tb=short"
       }
@@ -121,11 +156,11 @@ pipeline {
         }
       }
       steps {
-        sh "python pipeline/download_models.py --round ${params.ROUND}"
+        sh "python pipeline/download_models.py --round ${env.ROUND}"
       }
       post {
         success {
-          archiveArtifacts artifacts: "models/v${params.ROUND}/**", allowEmptyArchive: true
+          archiveArtifacts artifacts: "models/v${env.ROUND}/**", allowEmptyArchive: true
         }
       }
     }
@@ -136,8 +171,8 @@ pipeline {
           sh """
             python pipeline/trigger_argo.py \
               --workflow ${env.ARGO_WORKFLOW} \
-              --round ${params.ROUND} \
-              --model-path models/v${params.ROUND}/
+              --round ${env.ROUND} \
+              --model-path models/v${env.ROUND}/
           """
         }
       }

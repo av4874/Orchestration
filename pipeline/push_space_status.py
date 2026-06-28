@@ -145,10 +145,6 @@ def merge_lineage(existing_json: str | None, new_entry: dict) -> dict:
 
 def push_to_space(payload: dict, dry_run: bool, round_num: int) -> bool:
     """Push pipeline_status.json (and model_lineage.json if retrain happened) to HF Space."""
-    import shutil
-    import subprocess
-    import tempfile
-
     status_content = json.dumps(payload, indent=2)
     lineage_entry = build_lineage_entry(round_num)
 
@@ -163,50 +159,47 @@ def push_to_space(payload: dict, dry_run: bool, round_num: int) -> bool:
         print("ERROR: HF_TOKEN not set — cannot push to Space")
         return False
 
-    hf_user = SPACE_REPO.split("/")[0]
-    clone_url = f"https://{hf_user}:{HF_TOKEN}@huggingface.co/spaces/{SPACE_REPO}"
-    tmp_dir = Path(tempfile.mkdtemp(prefix="hf_space_"))
+    try:
+        from huggingface_hub import HfApi
+    except ImportError:
+        print("ERROR: huggingface_hub not installed — run: pip install huggingface_hub")
+        return False
+
+    api = HfApi(token=HF_TOKEN)
 
     try:
-        print(f"[Space] Cloning {SPACE_REPO}...")
-        subprocess.run(
-            ["git", "clone", "--depth", "1", clone_url, str(tmp_dir)],
-            check=True, capture_output=True, timeout=60,
+        api.upload_file(
+            path_or_fileobj=status_content.encode("utf-8"),
+            path_in_repo=SPACE_FILE,
+            repo_id=SPACE_REPO,
+            repo_type="space",
+            commit_message=f"chore: update dashboard round {payload['round']}",
         )
-
-        (tmp_dir / SPACE_FILE).write_text(status_content, encoding="utf-8")
+        print(f"[Space] Pushed {SPACE_FILE} — round {payload['round']}")
 
         if lineage_entry:
-            existing_path = tmp_dir / LINEAGE_FILE
-            existing = existing_path.read_text(encoding="utf-8") if existing_path.exists() else None
-            lineage = merge_lineage(existing, lineage_entry)
-            existing_path.write_text(json.dumps(lineage, indent=2), encoding="utf-8")
-            print(f"[Space] model_lineage.json updated — {len(lineage['rounds'])} rounds tracked")
+            try:
+                existing_raw = api.hf_hub_download(
+                    repo_id=SPACE_REPO, repo_type="space", filename=LINEAGE_FILE
+                )
+                existing_json = Path(existing_raw).read_text(encoding="utf-8")
+            except Exception:
+                existing_json = None
+            lineage = merge_lineage(existing_json, lineage_entry)
+            api.upload_file(
+                path_or_fileobj=json.dumps(lineage, indent=2).encode("utf-8"),
+                path_in_repo=LINEAGE_FILE,
+                repo_id=SPACE_REPO,
+                repo_type="space",
+                commit_message=f"chore: update model lineage round {round_num}",
+            )
+            print(f"[Space] {LINEAGE_FILE} updated — {len(lineage['rounds'])} rounds tracked")
 
-        env = {**os.environ, "GIT_AUTHOR_NAME": "pipeline", "GIT_AUTHOR_EMAIL": "pipeline@guardrail",
-               "GIT_COMMITTER_NAME": "pipeline", "GIT_COMMITTER_EMAIL": "pipeline@guardrail"}
-
-        files_to_add = [SPACE_FILE] + ([LINEAGE_FILE] if lineage_entry else [])
-        subprocess.run(["git", "add"] + files_to_add, check=True, cwd=tmp_dir, capture_output=True)
-
-        result = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=tmp_dir, capture_output=True)
-        if result.returncode == 0:
-            print("[Space] No changes — skipping push")
-            return True
-
-        subprocess.run(
-            ["git", "commit", "-m", f"chore: update dashboard round {payload['round']}"],
-            check=True, cwd=tmp_dir, capture_output=True, env=env,
-        )
-        subprocess.run(["git", "push"], check=True, cwd=tmp_dir, capture_output=True, timeout=60)
-        print(f"[Space] Pushed — round {payload['round']}")
         return True
 
-    except subprocess.CalledProcessError as e:
-        print(f"ERROR: git step failed: {e.stderr.decode()[:300]}")
+    except Exception as e:
+        print(f"ERROR: HF upload failed — {e}")
         return False
-    finally:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 def main():
