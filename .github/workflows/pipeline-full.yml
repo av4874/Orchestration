@@ -1,0 +1,276 @@
+name: Full Pipeline — Phase 1 → Approve → Phase 2
+
+on:
+  workflow_dispatch:
+    inputs:
+      round:
+        description: 'Round number (leave blank to auto-detect from attack_memory)'
+        required: false
+        default: ''
+
+jobs:
+  # ── Phase 1: Red + Blue team agents generate adversarial samples ─────────────
+  phase1-generate:
+    name: "Phase 1 — Attack Generation"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    outputs:
+      round: ${{ steps.set-round.outputs.round }}
+      samples_file: ${{ steps.set-round.outputs.samples_file }}
+      families: ${{ steps.summary.outputs.families }}
+      sample_count: ${{ steps.summary.outputs.sample_count }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - run: pip install -r requirements.txt
+
+      - name: Detect round number
+        id: set-round
+        run: |
+          if [ -n "${{ github.event.inputs.round }}" ]; then
+            ROUND="${{ github.event.inputs.round }}"
+          else
+            ROUND=$(python -c "
+          import json, os
+          mem_path = 'pipeline/attack_memory.json'
+          if os.path.exists(mem_path):
+              m = json.load(open(mem_path))
+              print(len(m.get('rounds', [])) + 1)
+          else:
+              print(1)
+          ")
+          fi
+          echo "round=$ROUND" >> $GITHUB_OUTPUT
+          echo "samples_file=results/round_${ROUND}_samples.json" >> $GITHUB_OUTPUT
+          echo "Round: $ROUND"
+
+      - name: Run Red Team Agent
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ADVERSARIAL_DATASET: Builder117/enterprise-adversarial-samples
+          ENTERPRISE_ROOT: ${{ github.workspace }}
+        run: python agents/red_team_agent.py --round ${{ steps.set-round.outputs.round }} --dry-run
+
+      - name: Run Blue Team Agent
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ADVERSARIAL_DATASET: Builder117/enterprise-adversarial-samples
+          ENTERPRISE_ROOT: ${{ github.workspace }}
+        run: python agents/blue_team_agent.py --round ${{ steps.set-round.outputs.round }} --dry-run
+
+      - name: Validate sample schema
+        run: |
+          python -c "
+          import json, sys
+          round_num = ${{ steps.set-round.outputs.round }}
+          path = f'results/round_{round_num}_samples.json'
+          samples = json.load(open(path))
+          required = {'id', 'detector', 'prompt', 'attack_family', 'expected_evasion'}
+          valid_det = {'injection','jailbreak','insecure_output','indirect_injection'}
+          for s in samples:
+              missing = required - s.keys()
+              if missing:
+                  print(f'ERROR: sample missing {missing}'); sys.exit(1)
+              if s['detector'] not in valid_det:
+                  print(f'ERROR: bad detector {s[\"detector\"]}'); sys.exit(1)
+          families = list(set(s['attack_family'] for s in samples))
+          print(f'VALID: {len(samples)} samples — families: {families}')
+          "
+
+      - name: Summarise Phase 1 for approval gate
+        id: summary
+        run: |
+          python -c "
+          import json, os
+          round_num = ${{ steps.set-round.outputs.round }}
+          path = f'results/round_{round_num}_samples.json'
+          samples = json.load(open(path))
+          families = list(set(s['attack_family'] for s in samples))
+          print(f'families={\"|\".join(families)}')
+          print(f'sample_count={len(samples)}')
+          " >> $GITHUB_OUTPUT
+
+      - name: Commit Phase 1 artifacts to master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ROUND: ${{ steps.set-round.outputs.round }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add --force \
+            results/round_${ROUND}_samples.json \
+            agent_traces/ \
+            agent_workspace/ \
+            2>/dev/null || true
+          git diff --cached --quiet && echo "Nothing to commit" && exit 0
+          git commit -m "chore: round-${ROUND} phase1 — attack samples generated"
+          git push origin master
+
+  # ── Approval gate: human reviews Phase 1 before Phase 2 fires ───────────────
+  approve-phase2:
+    name: "Approve Phase 2 — Review before testing"
+    needs: phase1-generate
+    runs-on: ubuntu-latest
+    environment: phase2-approval   # requires reviewer in repo Settings → Environments
+
+    steps:
+      - name: Show Phase 1 summary
+        run: |
+          echo "=========================================="
+          echo "  Round   : ${{ needs.phase1-generate.outputs.round }}"
+          echo "  Samples : ${{ needs.phase1-generate.outputs.sample_count }}"
+          echo "  Families: ${{ needs.phase1-generate.outputs.families }}"
+          echo "  File    : ${{ needs.phase1-generate.outputs.samples_file }}"
+          echo "=========================================="
+          echo "Approved — proceeding to Phase 2 (real attack tests + orchestrator)."
+
+  # ── Phase 2: Test samples against detectors, orchestrate, optionally retrain ─
+  phase2-test:
+    name: "Phase 2 — Attack Tests + Orchestrator + Kaggle Retrain"
+    needs: [phase1-generate, approve-phase2]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master   # pull the Phase 1 commit
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - run: pip install -r requirements.txt
+
+      - name: Run attack tests — all detectors
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          ENTERPRISE_ROOT: ${{ github.workspace }}
+        run: |
+          ROUND="${{ needs.phase1-generate.outputs.round }}"
+          for DETECTOR in injection jailbreak insecure_output indirect_injection; do
+            echo "--- Testing $DETECTOR ---"
+            python pipeline/run_attacks.py \
+              --samples results/round_${ROUND}_samples.json \
+              --detector $DETECTOR \
+              --round $ROUND
+          done
+
+      - name: Merge results into evasion report
+        env:
+          ENTERPRISE_ROOT: ${{ github.workspace }}
+        run: python pipeline/merge_results.py --round ${{ needs.phase1-generate.outputs.round }}
+
+      - name: Run Orchestrator Agent
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          ENTERPRISE_ROOT: ${{ github.workspace }}
+        run: python agents/orchestrator_agent.py --round ${{ needs.phase1-generate.outputs.round }}
+
+      - name: Show orchestrator decision
+        run: |
+          echo "--- pipeline_decision.json ---"
+          cat results/pipeline_decision.json
+
+      - name: Trigger Kaggle retraining (if retrain decision)
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          ENTERPRISE_ROOT: ${{ github.workspace }}
+        run: |
+          ROUND="${{ needs.phase1-generate.outputs.round }}"
+          ACTION=$(python -c "import json; print(json.load(open('results/pipeline_decision.json'))['action'])")
+          echo "Orchestrator action: $ACTION"
+          if [ "$ACTION" = "retrain" ] || [ "$ACTION" = "partial_retrain" ]; then
+            echo "Submitting Kaggle retrain kernel — watch at: https://www.kaggle.com/code/${{ secrets.KAGGLE_USERNAME }}"
+            python pipeline/retrain.py \
+              --decision results/pipeline_decision.json \
+              --round $ROUND
+          else
+            echo "No retraining needed (action=$ACTION)"
+          fi
+
+      - name: Update attack_memory
+        env:
+          ENTERPRISE_ROOT: ${{ github.workspace }}
+        run: |
+          python -c "
+          import json, os
+          from pathlib import Path
+          from datetime import datetime, timezone
+
+          mem_path = Path('pipeline/attack_memory.json')
+          m = json.loads(mem_path.read_text())
+          round_num = ${{ needs.phase1-generate.outputs.round }}
+
+          evasion_path = Path('results/evasion_report.json')
+          decision_path = Path('results/pipeline_decision.json')
+          red_path = Path('agent_workspace/red_to_orchestrator.json')
+
+          families_tried, top_family = [], 'unknown'
+          if red_path.exists():
+              red = json.loads(red_path.read_text())
+              families_tried = red['body'].get('families_tried', [])
+              top_family = red['body'].get('top_family', 'unknown')
+
+          evasion_rate = 0.0
+          if evasion_path.exists():
+              er = json.loads(evasion_path.read_text())
+              rates = [v.get('evasion_rate', 0) for v in er.get('per_detector', {}).values()]
+              evasion_rate = max(rates) if rates else 0.0
+
+          action = 'skip'
+          if decision_path.exists():
+              action = json.loads(decision_path.read_text()).get('action', 'skip')
+
+          m['rounds'] = [r for r in m.get('rounds', []) if r.get('round') != round_num]
+          m['rounds'].append({
+              'round': round_num,
+              'timestamp': datetime.now(timezone.utc).isoformat(),
+              'families_tried': families_tried,
+              'top_family': top_family,
+              'evasion_rate': round(evasion_rate, 4),
+              'action': action,
+          })
+          m['rounds'].sort(key=lambda r: r['round'])
+
+          if top_family and top_family not in m.get('known_blind_spots', []):
+              if evasion_rate < 0.3:
+                  m.setdefault('known_blind_spots', []).append(top_family)
+
+          mem_path.write_text(json.dumps(m, indent=2))
+          print(f'attack_memory updated — round {round_num}, action={action}, evasion={evasion_rate:.2%}')
+          "
+
+      - name: Commit Phase 2 results to master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ROUND: ${{ needs.phase1-generate.outputs.round }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add --force \
+            results/evasion_report.json \
+            results/pipeline_decision.json \
+            results/pipeline_env.sh \
+            results/retrain_report.json \
+            agent_traces/ \
+            pipeline/attack_memory.json \
+            2>/dev/null || true
+          git diff --cached --quiet && echo "Nothing to commit" && exit 0
+          git commit -m "chore: round-${ROUND} phase2 — evasion scored, orchestrator decided"
+          git push origin master
