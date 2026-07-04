@@ -37,7 +37,7 @@ _GHA_RUN_SUFFIX = os.environ.get("GITHUB_RUN_ID", "")[-6:] if os.environ.get("GI
 # Kaggle dataset that caches Qwen3-8B weights — avoids 15-min HF download every run.
 # Mounted at /kaggle/input/qwen3-8b-cache/ inside the kernel.
 # Set to "" to disable (e.g. before the dataset has been created via save_model_kernel).
-QWEN3_CACHE_DATASET = f"{KAGGLE_USERNAME}/qwen3-8b-cache"
+QWEN3_CACHE_DATASET = "amatullahvakhariya/qwen3-8b-cache"
 
 
 def _inject_round_into_notebook(notebook_json: str, round_num: int) -> str:

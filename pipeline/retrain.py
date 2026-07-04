@@ -35,7 +35,7 @@ KAGGLE_PUSH_DELAY_SEC   = float(os.environ.get("KAGGLE_PUSH_DELAY_SEC",   "2"))
 KAGGLE_POLL_INTERVAL_SEC = float(os.environ.get("KAGGLE_POLL_INTERVAL_SEC", "30"))
 KAGGLE_POLL_MAX          = int(os.environ.get("KAGGLE_POLL_MAX",           "40"))   # 40 * 30s = 20min max
 KAGGLE_BACKOFF_MAX_SEC   = float(os.environ.get("KAGGLE_BACKOFF_MAX_SEC",  "120"))
-KAGGLE_USERNAME          = os.environ.get("KAGGLE_USERNAME", "builder117")
+KAGGLE_USERNAME          = os.environ.get("KAGGLE_USERNAME", "amatullahvakhariya")
 
 # HF Hub dataset IDs per detector (source datasets)
 DATASET_IDS = {
