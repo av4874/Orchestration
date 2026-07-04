@@ -202,7 +202,7 @@ def _push_kernel_to_kaggle(detector: str, out_dir: Path, dataset_slug: str, kern
     print(f"  Pushing kernel: {full_slug}")
     _kaggle_call_with_backoff(
         client.kernels.kernels_api_client.save_kernel,
-        body=req,
+        request=req,
     )
     time.sleep(KAGGLE_PUSH_DELAY_SEC)
     return full_slug

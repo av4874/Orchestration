@@ -59,7 +59,7 @@ def _push_agent_kernel(agent: str, round_num: int) -> str:
     req.category_ids = []
 
     print(f"  Pushing kernel: {kernel_slug}")
-    _kaggle_call_with_backoff(client.kernels.kernels_api_client.save_kernel, body=req)
+    _kaggle_call_with_backoff(client.kernels.kernels_api_client.save_kernel, request=req)
     time.sleep(KAGGLE_PUSH_DELAY_SEC)
     return kernel_slug
 
