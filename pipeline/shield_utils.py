@@ -74,12 +74,13 @@ def score_via_api(text: str, detector: str) -> float:
     }
 
     # Step 1: Submit job (Gradio 5 path: /gradio_api/call/{fn_name})
+    # timeout=120: Space may be sleeping and needs up to 60s to wake
     submit_resp = requests.post(
         f"{SPACE_URL}/gradio_api/call/{fn_name}",
         headers=headers,
         json={"data": [text]},
         verify=False,
-        timeout=30,
+        timeout=120,
     )
     if not submit_resp.ok:
         raise RuntimeError(f"Submit failed HTTP {submit_resp.status_code}: {submit_resp.text[:300]}")

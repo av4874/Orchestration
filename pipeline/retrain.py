@@ -211,7 +211,7 @@ def _push_kernel_to_kaggle(detector: str, out_dir: Path, dataset_slug: str, kern
     req.language = "python"
     req.kernel_type = "script"
     req.is_private = True
-    req.enable_gpu = True
+    req.machine_shape = "NvidiaTeslaT4"
     req.enable_internet = True
     req.dataset_data_sources = [dataset_slug]
     req.competition_data_sources = []

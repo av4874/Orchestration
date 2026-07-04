@@ -101,6 +101,20 @@ def main():
         print("ERROR: HF_TOKEN not set. Use --dry-run or set HF_TOKEN.")
         sys.exit(1)
 
+    # Wake the HF Space if sleeping — first request can take 60s+
+    print("Waking HF Space (may take up to 60s if sleeping)...")
+    try:
+        import requests, urllib3
+        urllib3.disable_warnings()
+        wake = requests.get(
+            f"{__import__('pipeline.shield_utils', fromlist=['SPACE_URL']).SPACE_URL}/",
+            headers={"Authorization": f"Bearer {os.environ['HF_TOKEN']}"},
+            verify=False, timeout=90,
+        )
+        print(f"  Space status: {wake.status_code}")
+    except Exception as e:
+        print(f"  Space wake-up request failed ({e}) — scoring will retry individually")
+
     detectors_to_run = list(MODELS.keys()) if args.detector == "all" else [args.detector]
 
     for detector in detectors_to_run:
