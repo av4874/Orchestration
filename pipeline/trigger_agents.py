@@ -29,7 +29,6 @@ from pipeline.retrain import (
 )
 
 AGENTS_EXPORT_DIR = ENTERPRISE_ROOT / "kaggle_export" / "agents"
-DATASET_SOURCE = f"{KAGGLE_USERNAME}/enterprise-adversarial-samples"
 
 
 def _wait_for_kernel_idle(client, kernel_slug: str, max_wait_sec: int = 1800):
@@ -87,7 +86,7 @@ def _push_agent_kernel(agent: str, round_num: int) -> str:
     req.is_private = True
     req.enable_gpu = True
     req.enable_internet = True
-    req.dataset_data_sources = [DATASET_SOURCE]
+    req.dataset_data_sources = []
     req.competition_data_sources = []
     req.kernel_data_sources = []
     req.category_ids = []
