@@ -109,10 +109,16 @@ def _kaggle_call_with_backoff(fn, *args, **kwargs):
             if is_forbidden:
                 raise  # 403 is not retriable — bad creds or no active session
             if is_conflict:
-                # 409 = kernel still running; wait 60s per attempt
+                # log response body so we know WHY Kaggle is returning 409
+                body = ""
+                if hasattr(e, "response") and e.response is not None:
+                    try:
+                        body = e.response.text[:500]
+                    except Exception:
+                        pass
                 wait = 60
                 if attempt < 5:
-                    print(f"  Kaggle 409 conflict — kernel busy, waiting {wait}s (attempt {attempt+1}/6): {e}")
+                    print(f"  Kaggle 409 conflict — waiting {wait}s (attempt {attempt+1}/6): {e} | body={body}")
                     time.sleep(wait)
                 else:
                     raise
