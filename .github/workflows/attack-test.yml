@@ -44,7 +44,7 @@ jobs:
           echo "round=$ROUND" >> $GITHUB_OUTPUT
           echo "Round: $ROUND"
 
-      - name: Run attack tests — all detectors (dry-run)
+      - name: Run attack tests — all detectors
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           ENTERPRISE_ROOT: ${{ github.workspace }}
@@ -54,8 +54,7 @@ jobs:
             python pipeline/run_attacks.py \
               --samples results/round_${{ steps.set-round.outputs.round }}_samples.json \
               --detector $DETECTOR \
-              --round ${{ steps.set-round.outputs.round }} \
-              --dry-run
+              --round ${{ steps.set-round.outputs.round }}
           done
 
       - name: Merge results into evasion report
@@ -63,12 +62,12 @@ jobs:
           ENTERPRISE_ROOT: ${{ github.workspace }}
         run: python pipeline/merge_results.py --round ${{ steps.set-round.outputs.round }}
 
-      - name: Run Orchestrator Agent (dry-run)
+      - name: Run Orchestrator Agent
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           ENTERPRISE_ROOT: ${{ github.workspace }}
-        run: python agents/orchestrator_agent.py --round ${{ steps.set-round.outputs.round }} --dry-run
+        run: python agents/orchestrator_agent.py --round ${{ steps.set-round.outputs.round }}
 
       - name: Show orchestrator decision
         run: |
@@ -88,8 +87,7 @@ jobs:
             echo "Triggering Kaggle retraining..."
             python pipeline/retrain.py \
               --decision results/pipeline_decision.json \
-              --round ${{ steps.set-round.outputs.round }} \
-              --dry-run
+              --round ${{ steps.set-round.outputs.round }}
           else
             echo "No retraining needed (action=$ACTION)"
           fi
