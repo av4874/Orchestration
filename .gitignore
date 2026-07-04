@@ -10,7 +10,7 @@ venv/
 results/
 agent_workspace/
 agent_traces/
-kaggle_export/
+kaggle_export/**/*.csv
 
 # Committed explicitly
 !pipeline/attack_memory.json

@@ -1,0 +1,10 @@
+{
+  "title": "Adversarial Guardrail \u2014 injection augmented r1",
+  "id": "builder117/adversarial-guardrail-injection-r1",
+  "licenses": [
+    {
+      "name": "CC0-1.0"
+    }
+  ],
+  "description": "Augmented training set for injection detector. Round 1 adversarial samples appended \u2014 5 new attack examples."
+}
