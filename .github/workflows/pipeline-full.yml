@@ -186,7 +186,8 @@ jobs:
       - name: Show orchestrator decision
         run: |
           echo "--- pipeline_decision.json ---"
-          cat results/pipeline_decision.json
+          [ -f results/pipeline_decision.json ] && cat results/pipeline_decision.json || echo "WARNING: pipeline_decision.json not found — orchestrator may not have called decide_routing"
+        continue-on-error: true
 
       - name: Trigger Kaggle retraining (if retrain decision)
         env:

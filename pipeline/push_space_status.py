@@ -94,7 +94,7 @@ def build_lineage_entry(round_num: int) -> dict | None:
         er = json.loads(evasion_path.read_text(encoding="utf-8"))
         for det, v in er.get("per_detector", {}).items():
             pre_evasion[det] = round(v.get("evasion_rate", 0), 4)
-        attack_family = er.get("attack_family", "unknown")
+        attack_family = list(er.get("per_family", {}).keys())[0] if er.get("per_family") else "unknown"
 
     decision_path = RESULTS_DIR / "pipeline_decision.json"
     argo_workflow = "unknown"

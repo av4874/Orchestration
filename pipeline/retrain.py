@@ -349,7 +349,7 @@ import torch
 
 HF_TOKEN = os.environ["HF_TOKEN"]   # set in Kaggle Secrets
 MODEL_OUT = "{model_id}-v{new_version}"
-DATASET_CSV = "/kaggle/input/adversarial-guardrail-{detector.replace("_", "-")}-r{round_num}/dataset.csv"
+DATASET_CSV = "/kaggle/input/adversarial-guardrail-{detector.replace("_", "-")}-r{round_num}/adversarial_samples.csv"
 BASE_MODEL = "distilbert-base-uncased"
 LABEL2ID = {{"{POSITIVE_LABELS[detector]}": 1, "LEGIT": 0}}
 ID2LABEL = {{1: "{POSITIVE_LABELS[detector]}", 0: "LEGIT"}}

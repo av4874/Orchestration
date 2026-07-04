@@ -32,7 +32,7 @@ def read_attack_memory(query: str = "") -> str:
     """
     mem = _load()
     rounds_summary = [
-        {"round": r.get("round"), "family": r.get("top_family"), "evasion": r.get("evasion"), "action": r.get("action")}
+        {"round": r.get("round"), "family": r.get("top_family"), "evasion": r.get("evasion_rate"), "action": r.get("action")}
         for r in mem.get("rounds", [])
     ][-3:]  # last 3 rounds only — caps token cost as history grows
     if query:
