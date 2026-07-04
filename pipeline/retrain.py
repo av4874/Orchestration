@@ -185,20 +185,19 @@ def _push_kernel_to_kaggle(detector: str, out_dir: Path, dataset_slug: str, kern
     notebook_code = (out_dir / "retrain_notebook.py").read_text(encoding="utf-8")
     full_slug = f"{KAGGLE_USERNAME}/{kernel_slug}"
 
-    req = ApiSaveKernelRequest(
-        id=full_slug,
-        title=f"Retrain {detector} detector",
-        source=notebook_code,
-        language="python",
-        kernel_type="script",
-        is_private=True,
-        enable_gpu=True,
-        enable_internet=True,
-        dataset_data_sources=[dataset_slug],
-        competition_data_sources=[],
-        kernel_data_sources=[],
-        category_ids=[],
-    )
+    req = ApiSaveKernelRequest()
+    req.slug = full_slug
+    req.new_title = f"Retrain {detector} detector"
+    req.text = notebook_code
+    req.language = "python"
+    req.kernel_type = "script"
+    req.is_private = True
+    req.enable_gpu = True
+    req.enable_internet = True
+    req.dataset_data_sources = [dataset_slug]
+    req.competition_data_sources = []
+    req.kernel_data_sources = []
+    req.category_ids = []
 
     print(f"  Pushing kernel: {full_slug}")
     _kaggle_call_with_backoff(

@@ -44,20 +44,19 @@ def _push_agent_kernel(agent: str, round_num: int) -> str:
     kernel_slug = f"{KAGGLE_USERNAME}/enterprise-agent-{agent.replace('_', '-')}-r{round_num}"
 
     client = _get_kaggle_client()
-    req = ApiSaveKernelRequest(
-        id=kernel_slug,
-        title=f"Enterprise {agent} agent round {round_num}",
-        source=notebook_code,
-        language="python",
-        kernel_type="notebook",
-        is_private=True,
-        enable_gpu=True,
-        enable_internet=True,
-        dataset_data_sources=[DATASET_SOURCE],
-        competition_data_sources=[],
-        kernel_data_sources=[],
-        category_ids=[],
-    )
+    req = ApiSaveKernelRequest()
+    req.slug = kernel_slug
+    req.new_title = f"Enterprise {agent} agent round {round_num}"
+    req.text = notebook_code
+    req.language = "python"
+    req.kernel_type = "notebook"
+    req.is_private = True
+    req.enable_gpu = True
+    req.enable_internet = True
+    req.dataset_data_sources = [DATASET_SOURCE]
+    req.competition_data_sources = []
+    req.kernel_data_sources = []
+    req.category_ids = []
 
     print(f"  Pushing kernel: {kernel_slug}")
     _kaggle_call_with_backoff(client.kernels.kernels_api_client.save_kernel, body=req)
