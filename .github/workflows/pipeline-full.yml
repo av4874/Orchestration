@@ -100,6 +100,14 @@ jobs:
           print(f'sample_count={len(samples)}')
           " >> $GITHUB_OUTPUT
 
+      - name: Push Phase 1 status to HF Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          ENTERPRISE_ROOT: ${{ github.workspace }}
+        run: |
+          python pipeline/push_space_status.py --round ${{ steps.set-round.outputs.round }}
+        continue-on-error: true   # don't block pipeline if HF is unavailable
+
       - name: Commit Phase 1 artifacts to master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -274,3 +282,11 @@ jobs:
           git diff --cached --quiet && echo "Nothing to commit" && exit 0
           git commit -m "chore: round-${ROUND} phase2 — evasion scored, orchestrator decided"
           git push origin master
+
+      - name: Push Phase 2 full results to HF Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          ENTERPRISE_ROOT: ${{ github.workspace }}
+        run: |
+          python pipeline/push_space_status.py --round ${{ needs.phase1-generate.outputs.round }}
+        continue-on-error: true
