@@ -104,6 +104,16 @@ def _kaggle_call_with_backoff(fn, *args, **kwargs):
         except Exception as e:
             msg = str(e).lower()
             is_rate_limit = "429" in msg or "too many requests" in msg or "rate limit" in msg
+            is_conflict = "409" in msg or "conflict" in msg
+            if is_conflict:
+                # 409 = kernel still running; wait 60s per attempt
+                wait = 60
+                if attempt < 5:
+                    print(f"  Kaggle 409 conflict — kernel busy, waiting {wait}s (attempt {attempt+1}/6): {e}")
+                    time.sleep(wait)
+                else:
+                    raise
+                continue
             wait = min(delay * (2 ** attempt), KAGGLE_BACKOFF_MAX_SEC)
             if attempt < 5:
                 label = "429 backoff" if is_rate_limit else "retry"

@@ -32,6 +32,34 @@ AGENTS_EXPORT_DIR = ENTERPRISE_ROOT / "kaggle_export" / "agents"
 DATASET_SOURCE = "builder117/enterprise-adversarial-samples"
 
 
+def _wait_for_kernel_idle(client, kernel_slug: str, max_wait_sec: int = 600):
+    """Wait for an existing kernel to reach a terminal state before pushing a new version."""
+    owner, slug = kernel_slug.split("/", 1)
+    print(f"  Checking if {kernel_slug} is already running...")
+    deadline = time.time() + max_wait_sec
+    while time.time() < deadline:
+        try:
+            resp = _kaggle_call_with_backoff(
+                client.kernels.kernels_api_client.get_kernel_session_status,
+                user_name=owner, kernel_slug=slug,
+            )
+            status = getattr(resp, "status", None) or (resp.get("status") if isinstance(resp, dict) else "unknown")
+            status = str(status).lower()
+            if status in ("complete", "error", "cancelled"):
+                print(f"  Kernel idle (status={status}), safe to push.")
+                return
+            print(f"  Kernel still {status}, waiting 30s...")
+            time.sleep(30)
+        except Exception as e:
+            msg = str(e).lower()
+            if "404" in msg or "not found" in msg:
+                print(f"  Kernel doesn't exist yet, safe to create.")
+                return
+            print(f"  Status check error (proceeding anyway): {e}")
+            return
+    print(f"  WARNING: timed out waiting for {kernel_slug} to be idle after {max_wait_sec}s — attempting push anyway")
+
+
 def _push_agent_kernel(agent: str, round_num: int) -> str:
     """Push the agent's Kaggle kernel notebook and return the full kernel slug."""
     from kagglesdk.kernels.services.kernels_api_service import ApiSaveKernelRequest
@@ -44,6 +72,8 @@ def _push_agent_kernel(agent: str, round_num: int) -> str:
     kernel_slug = f"{KAGGLE_USERNAME}/enterprise-agent-{agent.replace('_', '-')}-r{round_num}"
 
     client = _get_kaggle_client()
+    _wait_for_kernel_idle(client, kernel_slug)
+
     req = ApiSaveKernelRequest()
     req.slug = kernel_slug
     req.new_title = f"Enterprise {agent} agent round {round_num}"
