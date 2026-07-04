@@ -254,6 +254,9 @@ def _poll_kernel_status(full_kernel_slug: str, wait: bool = True) -> str:
             # resp may be object or dict depending on SDK version
             status = getattr(resp, "status", None) or (resp.get("status") if isinstance(resp, dict) else "unknown")
             status = str(status).lower()
+            # SDK returns enum string like "kernelworkerstatus.error" — strip prefix
+            if "." in status:
+                status = status.split(".")[-1]
             print(f"  [{i+1}/{KAGGLE_POLL_MAX}] status={status}")
             if status in ("complete", "error", "cancelled"):
                 return status

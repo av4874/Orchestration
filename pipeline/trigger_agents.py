@@ -112,6 +112,8 @@ def _wait_for_kernel_idle(client, kernel_slug: str, max_wait_sec: int = 1800):
             )
             status = getattr(resp, "status", None) or (resp.get("status") if isinstance(resp, dict) else "unknown")
             status = str(status).lower()
+            if "." in status:
+                status = status.split(".")[-1]
             if status in ("complete", "error", "cancelled"):
                 print(f"  Kernel idle (status={status}), safe to push.")
                 return
@@ -165,6 +167,11 @@ def _push_agent_kernel(agent: str, round_num: int) -> str:
     req.competition_data_sources = []
     req.kernel_data_sources = []
     req.category_ids = []
+    # Request T4 — Kaggle may ignore but tries to honour when T4 available
+    try:
+        req.machine_shape = "GPU_T4_X1"
+    except Exception:
+        pass
 
     print(f"  Pushing kernel: {kernel_slug}")
     _kaggle_call_with_backoff(client.kernels.kernels_api_client.save_kernel, request=req)
@@ -207,22 +214,34 @@ def _download_results(agent: str, round_num: int):
         print("  WARNING: huggingface_hub not installed — skipping result download")
 
 
-def trigger_agent(agent: str, round_num: int, no_wait: bool = False):
-    """Push kernel, poll until complete, download results."""
+def trigger_agent(agent: str, round_num: int, no_wait: bool = False, max_attempts: int = 2):
+    """Push kernel, poll until complete, download results. Retries once on error (e.g. P100 assigned)."""
     print(f"[trigger_agents] {agent} round {round_num}")
 
-    kernel_slug = _push_agent_kernel(agent, round_num)
-    status = _poll_kernel_status(kernel_slug, wait=not no_wait)
+    last_slug = None
+    for attempt in range(1, max_attempts + 1):
+        if attempt > 1:
+            print(f"  Retry {attempt}/{max_attempts} — kernel errored, re-pushing (hoping for T4)...")
+            time.sleep(30)
 
-    if status == "complete":
-        print(f"  Kernel complete. Downloading results...")
-        _download_results(agent, round_num)
-    elif status in ("error", "cancelled"):
-        raise RuntimeError(f"Kaggle kernel {kernel_slug} ended with status={status}")
-    else:
-        print(f"  Kernel status={status} — results may not be ready")
+        kernel_slug = _push_agent_kernel(agent, round_num)
+        last_slug = kernel_slug
+        status = _poll_kernel_status(kernel_slug, wait=not no_wait)
 
-    return {"agent": agent, "round": round_num, "kernel": kernel_slug, "status": status}
+        if status == "complete":
+            print(f"  Kernel complete. Downloading results...")
+            _download_results(agent, round_num)
+            return {"agent": agent, "round": round_num, "kernel": kernel_slug, "status": status}
+        elif status in ("error", "cancelled"):
+            if attempt < max_attempts:
+                print(f"  Kernel {status} on attempt {attempt} — will retry")
+                continue
+            raise RuntimeError(f"Kaggle kernel {kernel_slug} ended with status={status} after {max_attempts} attempts")
+        else:
+            print(f"  Kernel status={status} — results may not be ready")
+            return {"agent": agent, "round": round_num, "kernel": kernel_slug, "status": status}
+
+    raise RuntimeError(f"All {max_attempts} attempts failed for {agent}")
 
 
 if __name__ == "__main__":
