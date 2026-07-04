@@ -12,6 +12,7 @@ Usage:
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -29,6 +30,31 @@ from pipeline.retrain import (
 )
 
 AGENTS_EXPORT_DIR = ENTERPRISE_ROOT / "kaggle_export" / "agents"
+
+# GHA run ID suffix keeps kernel slugs unique across retries — avoids 409 on rerun
+_GHA_RUN_SUFFIX = os.environ.get("GITHUB_RUN_ID", "")[-6:] if os.environ.get("GITHUB_RUN_ID") else ""
+
+
+def _inject_round_into_notebook(notebook_json: str, round_num: int) -> str:
+    """
+    Patch the notebook source so ROUND is hardcoded to round_num.
+    Kaggle SaveKernel has no env-var injection — only way to pass ROUND is via code.
+    Replaces the first occurrence of:
+        ROUND = int(os.environ.get("ROUND", ...))
+    with:
+        ROUND = <round_num>
+    """
+    patched = re.sub(
+        r'ROUND\s*=\s*int\(os\.environ\.get\(["\']ROUND["\'][^)]*\)\)',
+        f'ROUND = {round_num}',
+        notebook_json,
+        count=1,
+    )
+    if patched == notebook_json:
+        print(f"  WARNING: ROUND injection pattern not found in notebook — kernel will use default ROUND")
+    else:
+        print(f"  Injected ROUND={round_num} into notebook code")
+    return patched
 
 
 def _wait_for_kernel_idle(client, kernel_slug: str, max_wait_sec: int = 1800):
@@ -55,12 +81,9 @@ def _wait_for_kernel_idle(client, kernel_slug: str, max_wait_sec: int = 1800):
             time.sleep(30)
         except Exception as e:
             msg = str(e).lower()
-            if "404" in msg or "not found" in msg:
-                print(f"  Kernel doesn't exist yet, safe to create.")
-                return
-            if "403" in msg or "forbidden" in msg:
-                # No active session (Kaggle returns 403 instead of 404 when session doesn't exist)
-                print(f"  No active session (403) — safe to push.")
+            if "404" in msg or "not found" in msg or "403" in msg or "forbidden" in msg:
+                # No active session — safe to create/push
+                print(f"  No active session — safe to push.")
                 return
             print(f"  Status check error (proceeding anyway): {e}")
             return
@@ -76,7 +99,13 @@ def _push_agent_kernel(agent: str, round_num: int) -> str:
         raise FileNotFoundError(f"Kernel notebook not found: {notebook_path}")
 
     notebook_code = notebook_path.read_text(encoding="utf-8")
-    kernel_slug = f"{KAGGLE_USERNAME}/enterprise-agent-{agent.replace('_', '-')}-r{round_num}"
+
+    # Inject ROUND — Kaggle API has no env var field, must patch notebook code
+    notebook_code = _inject_round_into_notebook(notebook_code, round_num)
+
+    # Unique slug per GHA run avoids 409 when previous run's kernel is still alive
+    slug_suffix = f"-{_GHA_RUN_SUFFIX}" if _GHA_RUN_SUFFIX else ""
+    kernel_slug = f"{KAGGLE_USERNAME}/enterprise-{agent.replace('_', '-')}-r{round_num}{slug_suffix}"
 
     client = _get_kaggle_client()
     _wait_for_kernel_idle(client, kernel_slug)
@@ -104,7 +133,7 @@ def _push_agent_kernel(agent: str, round_num: int) -> str:
 def _download_results(agent: str, round_num: int):
     """Download agent result files from HF Hub into local results/ and agent_traces/."""
     try:
-        from huggingface_hub import hf_hub_download, list_repo_files
+        from huggingface_hub import hf_hub_download
         hf_token = os.environ.get("HF_TOKEN")
         repo_id = "Builder117/enterprise-adversarial-samples"
 
@@ -122,7 +151,7 @@ def _download_results(agent: str, round_num: int):
             local_path = ENTERPRISE_ROOT / remote_path
             local_path.parent.mkdir(parents=True, exist_ok=True)
             try:
-                downloaded = hf_hub_download(
+                hf_hub_download(
                     repo_id=repo_id,
                     filename=remote_path,
                     repo_type="dataset",

@@ -68,6 +68,7 @@ jobs:
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           ENTERPRISE_ROOT: ${{ github.workspace }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
         run: |
           python pipeline/trigger_agents.py \
             --agent orchestrator \
