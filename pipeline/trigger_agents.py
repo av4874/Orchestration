@@ -54,11 +54,12 @@ def _inject_round_into_notebook(notebook_json: str, round_num: int) -> str:
     return patched
 
 
-def _delete_stale_agent_kernels(client, round_num: int):
+def _delete_stale_agent_kernels(client, round_num: int, extra_slugs: list = None):
     """
     Delete all known enterprise agent kernel slugs by brute-force.
     list_kernels doesn't return private kernels, so we enumerate slug patterns directly.
     Kaggle 409 on SaveKernel = another kernel running on account (free-tier limit).
+    extra_slugs: additional exact slugs to delete (e.g. the current GHA-suffixed slug on retry).
     """
     from kagglesdk.kernels.types.kernels_api_service import ApiDeleteKernelRequest
 
@@ -66,7 +67,7 @@ def _delete_stale_agent_kernels(client, round_num: int):
     deleted_any = False
 
     # All slug patterns ever used across old and new format
-    candidate_slugs = []
+    candidate_slugs = list(extra_slugs or [])
     for ag in agents:
         for r in range(1, round_num + 2):
             candidate_slugs.append(f"enterprise-agent-{ag}-r{r}")   # old format
@@ -151,7 +152,8 @@ def _push_agent_kernel(agent: str, round_num: int) -> str:
     kernel_title = slug_only.replace("-", " ").title()
 
     client = _get_kaggle_client()
-    _delete_stale_agent_kernels(client, round_num)
+    # Pass current slug so retry deletes the GHA-suffixed kernel too (not just base patterns)
+    _delete_stale_agent_kernels(client, round_num, extra_slugs=[slug_only])
     _wait_for_kernel_idle(client, kernel_slug)
 
     req = ApiSaveKernelRequest()
@@ -233,8 +235,8 @@ def trigger_agent(agent: str, round_num: int, no_wait: bool = False, max_attempt
                 continue
             raise RuntimeError(f"Kaggle kernel {kernel_slug} ended with status={status} after {max_attempts} attempts")
         else:
-            print(f"  Kernel status={status} — results may not be ready")
-            return {"agent": agent, "round": round_num, "kernel": kernel_slug, "status": status}
+            # timeout = kernel never finished in poll window — treat as failure
+            raise RuntimeError(f"Kaggle kernel {kernel_slug} timed out after {max_attempts} poll cycles")
 
     raise RuntimeError(f"All {max_attempts} attempts failed for {agent}")
 
