@@ -32,16 +32,20 @@ AGENTS_EXPORT_DIR = ENTERPRISE_ROOT / "kaggle_export" / "agents"
 DATASET_SOURCE = f"{KAGGLE_USERNAME}/enterprise-adversarial-samples"
 
 
-def _wait_for_kernel_idle(client, kernel_slug: str, max_wait_sec: int = 600):
+def _wait_for_kernel_idle(client, kernel_slug: str, max_wait_sec: int = 1800):
     """Wait for an existing kernel to reach a terminal state before pushing a new version."""
+    from kagglesdk.kernels.types.kernels_api_service import ApiGetKernelSessionStatusRequest
     owner, slug = kernel_slug.split("/", 1)
     print(f"  Checking if {kernel_slug} is already running...")
     deadline = time.time() + max_wait_sec
     while time.time() < deadline:
         try:
+            req = ApiGetKernelSessionStatusRequest()
+            req.user_name = owner
+            req.kernel_slug = slug
             resp = _kaggle_call_with_backoff(
                 client.kernels.kernels_api_client.get_kernel_session_status,
-                user_name=owner, kernel_slug=slug,
+                request=req,
             )
             status = getattr(resp, "status", None) or (resp.get("status") if isinstance(resp, dict) else "unknown")
             status = str(status).lower()

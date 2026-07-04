@@ -234,9 +234,13 @@ def _poll_kernel_status(full_kernel_slug: str, wait: bool = True) -> str:
     for i in range(KAGGLE_POLL_MAX):
         time.sleep(KAGGLE_POLL_INTERVAL_SEC)
         try:
+            from kagglesdk.kernels.types.kernels_api_service import ApiGetKernelSessionStatusRequest
+            sreq = ApiGetKernelSessionStatusRequest()
+            sreq.user_name = owner
+            sreq.kernel_slug = slug
             resp = _kaggle_call_with_backoff(
                 client.kernels.kernels_api_client.get_kernel_session_status,
-                user_name=owner, kernel_slug=slug,
+                request=sreq,
             )
             # resp may be object or dict depending on SDK version
             status = getattr(resp, "status", None) or (resp.get("status") if isinstance(resp, dict) else "unknown")
