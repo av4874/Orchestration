@@ -52,21 +52,27 @@ jobs:
           echo "samples_file=results/round_${ROUND}_samples.json" >> $GITHUB_OUTPUT
           echo "Round: $ROUND"
 
-      - name: Run Red Team Agent
+      - name: Run Red Team Agent (Kaggle — Qwen3-8B)
         env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          ADVERSARIAL_DATASET: Builder117/enterprise-adversarial-samples
           ENTERPRISE_ROOT: ${{ github.workspace }}
-        run: python agents/red_team_agent.py --round ${{ steps.set-round.outputs.round }} --dry-run
+        run: |
+          python pipeline/trigger_agents.py \
+            --agent red_team \
+            --round ${{ steps.set-round.outputs.round }}
 
-      - name: Run Blue Team Agent
+      - name: Run Blue Team Agent (Kaggle — Qwen3-8B)
         env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          ADVERSARIAL_DATASET: Builder117/enterprise-adversarial-samples
           ENTERPRISE_ROOT: ${{ github.workspace }}
-        run: python agents/blue_team_agent.py --round ${{ steps.set-round.outputs.round }} --dry-run
+        run: |
+          python pipeline/trigger_agents.py \
+            --agent blue_team \
+            --round ${{ steps.set-round.outputs.round }}
 
       - name: Validate sample schema
         run: |
