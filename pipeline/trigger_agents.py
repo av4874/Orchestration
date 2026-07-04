@@ -69,10 +69,9 @@ def _delete_stale_agent_kernels(client, round_num: int):
     candidate_slugs = []
     for ag in agents:
         for r in range(1, round_num + 2):
-            # old format (enterprise-agent-*)
-            candidate_slugs.append(f"enterprise-agent-{ag}-r{r}")
-            # new format (enterprise-*-r*-RUNID) — try without suffix too
-            candidate_slugs.append(f"enterprise-{ag}-r{r}")
+            candidate_slugs.append(f"enterprise-agent-{ag}-r{r}")   # old format
+            candidate_slugs.append(f"enterprise-{ag}-r{r}")          # new format
+            candidate_slugs.append(f"enterprise-{ag}-agent-round-{r}")  # title-derived format
 
     for slug in candidate_slugs:
         try:
@@ -144,7 +143,10 @@ def _push_agent_kernel(agent: str, round_num: int) -> str:
 
     # Unique slug per GHA run avoids 409 when previous run's kernel is still alive
     slug_suffix = f"-{_GHA_RUN_SUFFIX}" if _GHA_RUN_SUFFIX else ""
-    kernel_slug = f"{KAGGLE_USERNAME}/enterprise-{agent.replace('_', '-')}-r{round_num}{slug_suffix}"
+    slug_only = f"enterprise-{agent.replace('_', '-')}-r{round_num}{slug_suffix}"
+    kernel_slug = f"{KAGGLE_USERNAME}/{slug_only}"
+    # Title must slugify to slug_only (Kaggle derives slug from title)
+    kernel_title = slug_only.replace("-", " ").title()
 
     client = _get_kaggle_client()
     _delete_stale_agent_kernels(client, round_num)
@@ -152,7 +154,7 @@ def _push_agent_kernel(agent: str, round_num: int) -> str:
 
     req = ApiSaveKernelRequest()
     req.slug = kernel_slug
-    req.new_title = f"Enterprise {agent} agent round {round_num}"
+    req.new_title = kernel_title
     req.text = notebook_code
     req.language = "python"
     req.kernel_type = "notebook"
