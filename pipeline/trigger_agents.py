@@ -39,13 +39,10 @@ def _inject_round_into_notebook(notebook_json: str, round_num: int) -> str:
     """
     Patch the notebook source so ROUND is hardcoded to round_num.
     Kaggle SaveKernel has no env-var injection — only way to pass ROUND is via code.
-    Replaces the first occurrence of:
-        ROUND = int(os.environ.get("ROUND", ...))
-    with:
-        ROUND = <round_num>
+    Matches escaped-quote variant in raw JSON: ROUND = int(os.environ.get(\\"ROUND\\"...))
     """
     patched = re.sub(
-        r'ROUND\s*=\s*int\(os\.environ\.get\(["\']ROUND["\'][^)]*\)\)',
+        r'ROUND\s*=\s*int\(os\.environ\.get\([^)]*\)\)',
         f'ROUND = {round_num}',
         notebook_json,
         count=1,
@@ -55,6 +52,48 @@ def _inject_round_into_notebook(notebook_json: str, round_num: int) -> str:
     else:
         print(f"  Injected ROUND={round_num} into notebook code")
     return patched
+
+
+def _delete_stale_agent_kernels(client):
+    """
+    Delete any previously pushed enterprise agent kernels for this user.
+    Kaggle returns 409 on SaveKernel when ANY kernel on the account is running —
+    free-tier allows only one concurrent kernel. Deleting stale ones unblocks the push.
+    """
+    from kagglesdk.kernels.types.kernels_api_service import (
+        ApiListKernelsRequest,
+        ApiDeleteKernelRequest,
+    )
+    try:
+        req = ApiListKernelsRequest()
+        req.user = KAGGLE_USERNAME
+        req.page_size = 20
+        resp = _kaggle_call_with_backoff(
+            client.kernels.kernels_api_client.list_kernels,
+            request=req,
+        )
+        kernels = getattr(resp, "kernels", []) or []
+        for k in kernels:
+            slug = getattr(k, "slug", None)
+            if not slug:
+                continue
+            if "enterprise" in slug.lower():
+                print(f"  Deleting stale kernel: {KAGGLE_USERNAME}/{slug}")
+                try:
+                    dreq = ApiDeleteKernelRequest()
+                    dreq.user_name = KAGGLE_USERNAME
+                    dreq.kernel_slug = slug
+                    _kaggle_call_with_backoff(
+                        client.kernels.kernels_api_client.delete_kernel,
+                        request=dreq,
+                    )
+                    print(f"  Deleted: {slug}")
+                except Exception as e:
+                    print(f"  Could not delete {slug}: {e}")
+        if kernels:
+            time.sleep(10)  # give Kaggle time to release the slot
+    except Exception as e:
+        print(f"  WARNING: stale kernel cleanup failed (non-fatal): {e}")
 
 
 def _wait_for_kernel_idle(client, kernel_slug: str, max_wait_sec: int = 1800):
@@ -108,6 +147,7 @@ def _push_agent_kernel(agent: str, round_num: int) -> str:
     kernel_slug = f"{KAGGLE_USERNAME}/enterprise-{agent.replace('_', '-')}-r{round_num}{slug_suffix}"
 
     client = _get_kaggle_client()
+    _delete_stale_agent_kernels(client)
     _wait_for_kernel_idle(client, kernel_slug)
 
     req = ApiSaveKernelRequest()
