@@ -167,11 +167,6 @@ def _push_agent_kernel(agent: str, round_num: int) -> str:
     req.competition_data_sources = []
     req.kernel_data_sources = []
     req.category_ids = []
-    # Request T4 — Kaggle may ignore but tries to honour when T4 available
-    try:
-        req.machine_shape = "GPU_T4_X1"
-    except Exception:
-        pass
 
     print(f"  Pushing kernel: {kernel_slug}")
     _kaggle_call_with_backoff(client.kernels.kernels_api_client.save_kernel, request=req)
