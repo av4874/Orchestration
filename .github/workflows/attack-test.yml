@@ -62,12 +62,16 @@ jobs:
           ENTERPRISE_ROOT: ${{ github.workspace }}
         run: python pipeline/merge_results.py --round ${{ steps.set-round.outputs.round }}
 
-      - name: Run Orchestrator Agent
+      - name: Run Orchestrator Agent (Kaggle — Qwen3-8B)
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           ENTERPRISE_ROOT: ${{ github.workspace }}
-        run: python agents/orchestrator_agent.py --round ${{ steps.set-round.outputs.round }}
+        run: |
+          python pipeline/trigger_agents.py \
+            --agent orchestrator \
+            --round ${{ steps.set-round.outputs.round }}
 
       - name: Show orchestrator decision
         run: |

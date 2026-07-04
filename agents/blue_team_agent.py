@@ -41,9 +41,13 @@ JSON bodies only. Use real evasion scores."""
 
 
 def _make_llm(llm=None):
-    if llm is None:
-        raise RuntimeError("No LLM — pass llm= arg or use --dry-run")
-    return llm
+    if llm is not None:
+        return llm
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY not set — cannot run live blue team agent")
+    from langchain_anthropic import ChatAnthropic
+    return ChatAnthropic(model="claude-haiku-4-5-20251001", api_key=api_key, temperature=0)
 
 
 def run(round_num: int, dry_run: bool, llm=None):

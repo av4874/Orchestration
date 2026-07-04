@@ -82,16 +82,13 @@ def load_evaded_samples(detector: str) -> list:
 
 
 def _get_kaggle_client():
-    """
-    Build KaggleClient from KAGGLE_API_TOKEN env var (new kagglesdk v2 auth).
-    Raises RuntimeError if token not set.
-    """
+    """Build KaggleClient — accepts KAGGLE_API_TOKEN or KAGGLE_KEY (GHA secret name)."""
     from kagglesdk import KaggleClient
-    token = os.environ.get("KAGGLE_API_TOKEN")
+    token = os.environ.get("KAGGLE_API_TOKEN") or os.environ.get("KAGGLE_KEY")
     if not token:
         raise RuntimeError(
-            "KAGGLE_API_TOKEN not set. "
-            "Get token at kaggle.com/settings/api then: $env:KAGGLE_API_TOKEN='your_token'"
+            "Set KAGGLE_API_TOKEN or KAGGLE_KEY. "
+            "Get token at kaggle.com/settings/api"
         )
     return KaggleClient(api_token=token)
 

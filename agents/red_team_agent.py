@@ -47,7 +47,7 @@ Call tools only. Minimum 5 valid samples."""
 
 def _make_llm(llm=None):
     if llm is None:
-        raise RuntimeError("No LLM — pass llm= arg or use --dry-run")
+        raise RuntimeError("No LLM — pass llm= arg or use --dry-run. Live runs use Kaggle Qwen3 kernel.")
     return llm
 
 
