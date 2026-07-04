@@ -29,7 +29,7 @@ from pipeline.retrain import (
 )
 
 AGENTS_EXPORT_DIR = ENTERPRISE_ROOT / "kaggle_export" / "agents"
-DATASET_SOURCE = "builder117/enterprise-adversarial-samples"
+DATASET_SOURCE = f"{KAGGLE_USERNAME}/enterprise-adversarial-samples"
 
 
 def _wait_for_kernel_idle(client, kernel_slug: str, max_wait_sec: int = 600):

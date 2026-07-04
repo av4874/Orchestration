@@ -305,7 +305,7 @@ def export_kaggle_dataset(detector: str, evaded_samples: list, round_num: int, d
     # Write Kaggle dataset metadata card
     metadata = {
         "title": f"Adversarial Guardrail — {detector} augmented r{round_num}",
-        "id": f"builder117/adversarial-guardrail-{detector.replace('_', '-')}-r{round_num}",
+        "id": f"{KAGGLE_USERNAME}/adversarial-guardrail-{detector.replace('_', '-')}-r{round_num}",
         "licenses": [{"name": "CC0-1.0"}],
         "description": (
             f"Augmented training set for {detector} detector. "
