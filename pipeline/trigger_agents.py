@@ -59,10 +59,9 @@ def _wait_for_kernel_idle(client, kernel_slug: str, max_wait_sec: int = 1800):
                 print(f"  Kernel doesn't exist yet, safe to create.")
                 return
             if "403" in msg or "forbidden" in msg:
-                # Kernel exists but may still be running — treat as busy, keep polling
-                print(f"  403 forbidden on status check — kernel may be running, waiting 60s...")
-                time.sleep(60)
-                continue
+                # No active session (Kaggle returns 403 instead of 404 when session doesn't exist)
+                print(f"  No active session (403) — safe to push.")
+                return
             print(f"  Status check error (proceeding anyway): {e}")
             return
     print(f"  WARNING: timed out waiting for {kernel_slug} to be idle after {max_wait_sec}s — attempting push anyway")

@@ -105,6 +105,9 @@ def _kaggle_call_with_backoff(fn, *args, **kwargs):
             msg = str(e).lower()
             is_rate_limit = "429" in msg or "too many requests" in msg or "rate limit" in msg
             is_conflict = "409" in msg or "conflict" in msg
+            is_forbidden = "403" in msg or "forbidden" in msg
+            if is_forbidden:
+                raise  # 403 is not retriable — bad creds or no active session
             if is_conflict:
                 # 409 = kernel still running; wait 60s per attempt
                 wait = 60
