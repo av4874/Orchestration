@@ -168,6 +168,7 @@ def _push_agent_kernel(agent: str, round_num: int) -> str:
     req.language = "python"
     req.kernel_type = "notebook"
     req.is_private = True
+    req.enable_gpu = True
     req.machine_shape = "NvidiaTeslaT4"
     req.enable_internet = True
     # Attach Qwen3-8B cache dataset if available — skips 15-min HF download per run
