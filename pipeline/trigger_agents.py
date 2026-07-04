@@ -34,6 +34,11 @@ AGENTS_EXPORT_DIR = ENTERPRISE_ROOT / "kaggle_export" / "agents"
 # GHA run ID suffix keeps kernel slugs unique across retries — avoids 409 on rerun
 _GHA_RUN_SUFFIX = os.environ.get("GITHUB_RUN_ID", "")[-6:] if os.environ.get("GITHUB_RUN_ID") else ""
 
+# Kaggle dataset that caches Qwen3-8B weights — avoids 15-min HF download every run.
+# Mounted at /kaggle/input/qwen3-8b-cache/ inside the kernel.
+# Set to "" to disable (e.g. before the dataset has been created via save_model_kernel).
+QWEN3_CACHE_DATASET = f"{KAGGLE_USERNAME}/qwen3-8b-cache"
+
 
 def _inject_round_into_notebook(notebook_json: str, round_num: int) -> str:
     """
@@ -165,7 +170,9 @@ def _push_agent_kernel(agent: str, round_num: int) -> str:
     req.is_private = True
     req.enable_gpu = True
     req.enable_internet = True
-    req.dataset_data_sources = []
+    # Attach Qwen3-8B cache dataset if available — skips 15-min HF download per run
+    dataset_sources = [QWEN3_CACHE_DATASET] if QWEN3_CACHE_DATASET else []
+    req.dataset_data_sources = dataset_sources
     req.competition_data_sources = []
     req.kernel_data_sources = []
     req.category_ids = []
