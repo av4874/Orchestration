@@ -33,7 +33,7 @@ KAGGLE_EXPORT_DIR = ENTERPRISE_ROOT / "kaggle_export"
 # Kaggle rate-limit config (override via env vars)
 KAGGLE_PUSH_DELAY_SEC   = float(os.environ.get("KAGGLE_PUSH_DELAY_SEC",   "2"))
 KAGGLE_POLL_INTERVAL_SEC = float(os.environ.get("KAGGLE_POLL_INTERVAL_SEC", "30"))
-KAGGLE_POLL_MAX          = int(os.environ.get("KAGGLE_POLL_MAX",           "40"))   # 40 * 30s = 20min max
+KAGGLE_POLL_MAX          = int(os.environ.get("KAGGLE_POLL_MAX",           "60"))   # 60 * 30s = 30min max (covers HF Hub download ~15min + load ~5min + inference ~10min)
 KAGGLE_BACKOFF_MAX_SEC   = float(os.environ.get("KAGGLE_BACKOFF_MAX_SEC",  "120"))
 KAGGLE_USERNAME          = os.environ.get("KAGGLE_USERNAME", "amatullahvakhariya")
 
