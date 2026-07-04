@@ -1,4 +1,4 @@
-name: Full Pipeline — Phase 1 → Approve → Phase 2
+name: Full Pipeline — Phase 1 → Phase 2
 
 on:
   workflow_dispatch:
@@ -87,7 +87,7 @@ jobs:
           print(f'VALID: {len(samples)} samples — families: {families}')
           "
 
-      - name: Summarise Phase 1 for approval gate
+      - name: Summarise Phase 1
         id: summary
         run: |
           python -c "
@@ -124,28 +124,10 @@ jobs:
           git commit -m "chore: round-${ROUND} phase1 — attack samples generated"
           git push origin master
 
-  # ── Approval gate: human reviews Phase 1 before Phase 2 fires ───────────────
-  approve-phase2:
-    name: "Approve Phase 2 — Review before testing"
-    needs: phase1-generate
-    runs-on: ubuntu-latest
-    environment: phase2-approval   # requires reviewer in repo Settings → Environments
-
-    steps:
-      - name: Show Phase 1 summary
-        run: |
-          echo "=========================================="
-          echo "  Round   : ${{ needs.phase1-generate.outputs.round }}"
-          echo "  Samples : ${{ needs.phase1-generate.outputs.sample_count }}"
-          echo "  Families: ${{ needs.phase1-generate.outputs.families }}"
-          echo "  File    : ${{ needs.phase1-generate.outputs.samples_file }}"
-          echo "=========================================="
-          echo "Approved — proceeding to Phase 2 (real attack tests + orchestrator)."
-
   # ── Phase 2: Test samples against detectors, orchestrate, optionally retrain ─
   phase2-test:
     name: "Phase 2 — Attack Tests + Orchestrator + Kaggle Retrain"
-    needs: [phase1-generate, approve-phase2]
+    needs: phase1-generate
     runs-on: ubuntu-latest
     permissions:
       contents: write
