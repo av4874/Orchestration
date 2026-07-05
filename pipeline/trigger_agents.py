@@ -197,8 +197,10 @@ def _push_agent_kernel(agent: str, round_num: int) -> str:
     req.enable_gpu = True
     req.machine_shape = "NvidiaTeslaT4"
     req.enable_internet = True
-    # Attach Qwen3-8B cache dataset if available — skips 15-min HF download per run
-    dataset_sources = [QWEN3_CACHE_DATASET] if QWEN3_CACHE_DATASET else []
+    # Qwen3-8B cache only for kernels that actually load the LLM.
+    # retrain kernel uses DistilBERT only — attaching a ~5GB cache dataset wastes mount time.
+    needs_llm = agent != "retrain"
+    dataset_sources = [QWEN3_CACHE_DATASET] if (QWEN3_CACHE_DATASET and needs_llm) else []
     req.dataset_data_sources = dataset_sources
     req.competition_data_sources = []
     req.kernel_data_sources = []
