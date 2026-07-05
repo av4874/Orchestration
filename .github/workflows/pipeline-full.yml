@@ -132,6 +132,7 @@ jobs:
             2>/dev/null || true
           git diff --cached --quiet && echo "Nothing to commit" && exit 0
           git commit -m "chore: round-${ROUND} phase1 — attack samples generated"
+          git pull --rebase origin master
           git push origin master
 
   # ── Phase 2: Test samples against detectors, orchestrate, optionally retrain ─
@@ -297,6 +298,7 @@ jobs:
             2>/dev/null || true
           git diff --cached --quiet && echo "Nothing to commit" && exit 0
           git commit -m "chore: round-${ROUND} phase2 — evasion scored, orchestrator decided"
+          git pull --rebase origin master
           git push origin master
 
       - name: Push Phase 2 full results to HF Space
