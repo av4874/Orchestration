@@ -42,12 +42,30 @@ def build_status(round_num: int) -> dict:
     if red_msg_path.exists():
         red = json.loads(red_msg_path.read_text(encoding="utf-8"))
         body = red.get("body", {})
-        fam_list = body.get("families_tried") or [body.get("top_family", "unknown")]
+        # Body may use families_tried/top_family (old) or valid_samples[].attack_family (new)
+        if body.get("families_tried"):
+            fam_list = body["families_tried"]
+        elif body.get("top_family"):
+            fam_list = [body["top_family"]]
+        elif body.get("valid_samples"):
+            # Aggregate by attack_family from valid_samples
+            from collections import Counter
+            counts = Counter(s.get("attack_family", "unknown") for s in body["valid_samples"])
+            fam_list = list(counts.keys())
+        else:
+            fam_list = ["unknown"]
         for fam in fam_list:
+            # Count samples for this family from valid_samples if available
+            valid = body.get("valid_samples", [])
+            fam_count = sum(1 for s in valid if s.get("attack_family") == fam) if valid else body.get("samples_generated", body.get("sample_count", 0))
+            evasion = body.get("expected_evasion", 0.0)
+            if valid:
+                fam_evasion = sum(1 for s in valid if s.get("attack_family") == fam and s.get("expected_evasion")) / max(fam_count, 1)
+                evasion = fam_evasion
             families_tried.append({
                 "name": fam,
-                "samples": body.get("samples_generated", body.get("sample_count", 0)),
-                "evasion_pct": body.get("expected_evasion", 0.0),
+                "samples": fam_count,
+                "evasion_pct": evasion,
             })
 
     # Orchestrator decision
