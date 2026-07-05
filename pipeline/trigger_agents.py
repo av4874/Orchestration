@@ -71,9 +71,11 @@ def _inject_hf_token_into_notebook(notebook_json: str) -> str:
         return notebook_json
     # Replace the fallback assignment in the except block — UserSecretsClient wins if secret attached,
     # our injected value wins in GHA-triggered runs where no Kaggle secret is present.
+    # Notebook JSON stores Python source with JSON-escaped quotes: "  →  \"
+    # So the pattern in raw notebook_json is  HF_TOKEN = os.environ.get(\"HF_TOKEN\", \"\")
     patched = notebook_json.replace(
-        'HF_TOKEN = os.environ.get("HF_TOKEN", "")',
-        f'HF_TOKEN = "{hf_token}"',
+        'HF_TOKEN = os.environ.get(\\"HF_TOKEN\\", \\"\\")',
+        f'HF_TOKEN = \\"{hf_token}\\"',
     )
     if patched == notebook_json:
         print("  WARNING: HF_TOKEN injection pattern not found in notebook")
