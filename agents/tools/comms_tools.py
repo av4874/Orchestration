@@ -6,7 +6,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-from langchain.tools import tool
+from langchain_core.tools import tool
 
 WORKSPACE = Path(os.environ.get("ENTERPRISE_ROOT", ".")) / "agent_workspace"
 
