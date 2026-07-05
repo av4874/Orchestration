@@ -173,6 +173,23 @@ jobs:
           ENTERPRISE_ROOT: ${{ github.workspace }}
         run: python pipeline/merge_results.py --round ${{ needs.phase1-generate.outputs.round }}
 
+      - name: Upload evasion report to HF Hub (for orchestrator kernel)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python -c "
+          import os
+          from huggingface_hub import upload_file
+          upload_file(
+              path_or_fileobj='results/evasion_report.json',
+              path_in_repo='results/evasion_report.json',
+              repo_id='Builder117/enterprise-adversarial-samples',
+              repo_type='dataset',
+              token=os.environ['HF_TOKEN'],
+          )
+          print('Uploaded evasion_report.json to HF Hub')
+          "
+
       - name: Run Orchestrator Agent (Kaggle — Qwen3-8B)
         env:
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
@@ -200,7 +217,7 @@ jobs:
           ENTERPRISE_ROOT: ${{ github.workspace }}
         run: |
           ROUND="${{ needs.phase1-generate.outputs.round }}"
-          ACTION=$(python -c "import json; print(json.load(open('results/pipeline_decision.json'))['action'])")
+          ACTION=$(python -c "import json,sys; p='results/pipeline_decision.json'; import os; print(json.load(open(p))['action'] if os.path.exists(p) else 'skip')" 2>/dev/null || echo "skip")
           echo "Orchestrator action: $ACTION"
           if [ "$ACTION" = "retrain" ] || [ "$ACTION" = "partial_retrain" ]; then
             echo "Submitting Kaggle retrain kernel — watch at: https://www.kaggle.com/code/${{ secrets.KAGGLE_USERNAME }}"

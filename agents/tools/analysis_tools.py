@@ -5,9 +5,25 @@ import json
 import os
 from pathlib import Path
 
-from langchain.tools import tool
+from langchain_core.tools import tool
 
 RESULTS_DIR = Path(os.environ.get("ENTERPRISE_ROOT", ".")) / "results"
+_HF_REPO = "Builder117/enterprise-adversarial-samples"
+
+
+def _fetch_evasion_report_from_hf() -> dict | None:
+    """Download evasion_report.json from HF Hub when local file is absent (Kaggle kernel context)."""
+    try:
+        from huggingface_hub import hf_hub_download
+        hf_token = os.environ.get("HF_TOKEN", "")
+        local = hf_hub_download(
+            _HF_REPO, "results/evasion_report.json",
+            repo_type="dataset", token=hf_token or None,
+            local_dir=str(RESULTS_DIR.parent),
+        )
+        return json.loads(Path(local).read_text(encoding="utf-8"))
+    except Exception:
+        return None
 
 DETECTORS = ["injection", "jailbreak", "insecure_output", "indirect_injection"]
 CRITICAL_THRESHOLD = 0.40
@@ -22,10 +38,12 @@ def read_evasion_report(filter_detector: str = "") -> str:
     Pass filter_detector to focus on one detector or leave empty for full report.
     """
     report_path = RESULTS_DIR / "evasion_report.json"
-    if not report_path.exists():
-        return "ERROR: evasion_report.json not found. Has Jenkins merge stage run?"
-
-    report = json.loads(report_path.read_text(encoding="utf-8"))
+    if report_path.exists():
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    else:
+        report = _fetch_evasion_report_from_hf()
+        if report is None:
+            return "ERROR: evasion_report.json not found locally or on HF Hub."
 
     if filter_detector:
         if filter_detector not in DETECTORS:
@@ -63,7 +81,11 @@ def analyze_weakness(analysis_input: str) -> str:
         return f"ERROR: invalid JSON — {e}"
 
     report_path = RESULTS_DIR / "evasion_report.json"
-    if not report_path.exists():
+    if report_path.exists():
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    else:
+        report = _fetch_evasion_report_from_hf()
+    if report is None:
         return json.dumps({
             "note": "No evasion_report.json — using prior-round estimates.",
             "weaknesses": [
@@ -75,7 +97,6 @@ def analyze_weakness(analysis_input: str) -> str:
             "retrain_priority": ["injection", "indirect_injection"],
         }, indent=2)
 
-    report = json.loads(report_path.read_text(encoding="utf-8"))
     per_detector = report.get("per_detector", {})
     per_family = report.get("per_family", {})
 
