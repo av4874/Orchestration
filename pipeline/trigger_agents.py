@@ -226,6 +226,7 @@ def _download_results(agent: str, round_num: int):
             "orchestrator": [f"results/pipeline_decision.json",
                              f"agent_traces/round_{round_num}_orchestrator.json",
                              f"pipeline/attack_memory.json"],
+            "retrain":      [f"results/retrain_report.json"],
         }
 
         for remote_path in result_files.get(agent, []):
@@ -279,7 +280,7 @@ def trigger_agent(agent: str, round_num: int, no_wait: bool = False,
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--agent", choices=["red_team", "blue_team", "orchestrator"], required=True)
+    parser.add_argument("--agent", choices=["red_team", "blue_team", "orchestrator", "retrain"], required=True)
     parser.add_argument("--round", type=int, default=1)
     parser.add_argument("--no-wait", action="store_true", help="Submit kernel, do not poll")
     args = parser.parse_args()

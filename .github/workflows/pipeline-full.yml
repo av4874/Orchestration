@@ -210,24 +210,25 @@ jobs:
           [ -f results/pipeline_decision.json ] && cat results/pipeline_decision.json || echo "WARNING: pipeline_decision.json not found — orchestrator may not have called decide_routing"
         continue-on-error: true
 
-      - name: Trigger Kaggle retraining (if retrain decision)
+      - name: Fine-tune detector on Kaggle T4 (if full-canary)
         env:
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
-          KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_KEY }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           ENTERPRISE_ROOT: ${{ github.workspace }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          KAGGLE_MAX_ATTEMPTS: 1
         run: |
           ROUND="${{ needs.phase1-generate.outputs.round }}"
-          ACTION=$(python -c "import json,sys; p='results/pipeline_decision.json'; import os; print(json.load(open(p))['action'] if os.path.exists(p) else 'skip')" 2>/dev/null || echo "skip")
+          ACTION=$(python -c "import json,os; p='results/pipeline_decision.json'; print(json.load(open(p))['action'] if os.path.exists(p) else 'skip')" 2>/dev/null || echo "skip")
           echo "Orchestrator action: $ACTION"
-          if [ "$ACTION" = "retrain" ] || [ "$ACTION" = "partial_retrain" ]; then
-            echo "Submitting Kaggle retrain kernel — watch at: https://www.kaggle.com/code/${{ secrets.KAGGLE_USERNAME }}"
-            python pipeline/retrain.py \
-              --decision results/pipeline_decision.json \
-              --round $ROUND
+          if [ "$ACTION" = "full-canary" ]; then
+            echo "Action=full-canary — running DistilBERT fine-tune on Kaggle T4..."
+            python pipeline/trigger_agents.py --agent retrain --round $ROUND
           else
-            echo "No retraining needed (action=$ACTION)"
+            echo "Action=$ACTION — no fine-tuning needed this round"
           fi
+        continue-on-error: true
 
       - name: Update attack_memory
         env:
