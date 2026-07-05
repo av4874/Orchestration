@@ -42,7 +42,8 @@ def build_status(round_num: int) -> dict:
     if red_msg_path.exists():
         red = json.loads(red_msg_path.read_text(encoding="utf-8"))
         body = red.get("body", {})
-        for fam in body.get("families_tried", [body.get("top_family", "unknown")]):
+        fam_list = body.get("families_tried") or [body.get("top_family", "unknown")]
+        for fam in fam_list:
             families_tried.append({
                 "name": fam,
                 "samples": body.get("samples_generated", body.get("sample_count", 0)),
