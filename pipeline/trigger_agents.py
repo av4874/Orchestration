@@ -243,7 +243,8 @@ def _download_results(agent: str, round_num: int):
         print("  WARNING: huggingface_hub not installed — skipping result download")
 
 
-def trigger_agent(agent: str, round_num: int, no_wait: bool = False, max_attempts: int = 4):
+def trigger_agent(agent: str, round_num: int, no_wait: bool = False,
+                  max_attempts: int = int(os.environ.get("KAGGLE_MAX_ATTEMPTS", "4"))):
     """Push kernel, poll until complete, download results. Retries up to 4x — P100 fails fast, retry re-rolls for T4."""
     print(f"[trigger_agents] {agent} round {round_num}")
 

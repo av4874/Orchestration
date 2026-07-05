@@ -10,7 +10,7 @@ from pathlib import Path
 import requests
 import urllib3
 from jsonschema import validate, ValidationError
-from langchain.tools import tool
+from langchain_core.tools import tool
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
