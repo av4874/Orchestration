@@ -1,0 +1,39 @@
+name: Push HF Space app.py
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'hf_space/app.py'
+    branches:
+      - master
+
+jobs:
+  push-space:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - run: pip install huggingface_hub
+
+      - name: Push app.py to HF Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python - <<'EOF'
+          import os
+          from huggingface_hub import HfApi
+          api = HfApi(token=os.environ["HF_TOKEN"])
+          api.upload_file(
+              path_or_fileobj="hf_space/app.py",
+              path_in_repo="app.py",
+              repo_id="Builder117/Orchestration",
+              repo_type="space",
+              commit_message="feat: enhanced dashboard — model progress, attack analysis, blue team trends",
+          )
+          print("Pushed app.py to Builder117/Orchestration")
+          EOF
