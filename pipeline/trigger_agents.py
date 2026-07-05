@@ -59,6 +59,29 @@ def _inject_round_into_notebook(notebook_json: str, round_num: int) -> str:
     return patched
 
 
+def _inject_hf_token_into_notebook(notebook_json: str) -> str:
+    """
+    Inject HF_TOKEN from GHA environment into the notebook so the kernel can push to HF Hub.
+    Kaggle secrets can't be set via API — patching is the only option for GHA-triggered kernels.
+    The notebooks are private so embedding the token is acceptable.
+    """
+    hf_token = os.environ.get("HF_TOKEN", "")
+    if not hf_token:
+        print("  WARNING: HF_TOKEN not set in environment — kernel will fail at HF Hub upload")
+        return notebook_json
+    # Replace the fallback assignment in the except block — UserSecretsClient wins if secret attached,
+    # our injected value wins in GHA-triggered runs where no Kaggle secret is present.
+    patched = notebook_json.replace(
+        'HF_TOKEN = os.environ.get("HF_TOKEN", "")',
+        f'HF_TOKEN = "{hf_token}"',
+    )
+    if patched == notebook_json:
+        print("  WARNING: HF_TOKEN injection pattern not found in notebook")
+    else:
+        print("  Injected HF_TOKEN into notebook code")
+    return patched
+
+
 def _delete_stale_agent_kernels(client, round_num: int, extra_slugs: list = None):
     """
     Delete all known enterprise agent kernel slugs by brute-force.
@@ -146,8 +169,9 @@ def _push_agent_kernel(agent: str, round_num: int) -> str:
 
     notebook_code = notebook_path.read_text(encoding="utf-8")
 
-    # Inject ROUND — Kaggle API has no env var field, must patch notebook code
+    # Inject ROUND and HF_TOKEN — Kaggle API has no env var field, must patch notebook code
     notebook_code = _inject_round_into_notebook(notebook_code, round_num)
+    notebook_code = _inject_hf_token_into_notebook(notebook_code)
 
     # Unique slug per GHA run avoids 409 when previous run's kernel is still alive
     slug_suffix = f"-{_GHA_RUN_SUFFIX}" if _GHA_RUN_SUFFIX else ""
