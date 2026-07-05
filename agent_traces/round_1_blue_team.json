@@ -3,8 +3,8 @@
   "mode": "live_qwen3",
   "agent": "blue_team",
   "model": "Qwen/Qwen3-8B-INT4",
-  "total_tokens": 352,
+  "total_tokens": 349,
   "steps": 5,
-  "final_output": "The evasion report is not available, which suggests that the Jenkins merge stage may not have completed successfully. Please verify the status of the Jenkins pipeline and ensure that the evasion report is generated before proceeding with further analysis.",
-  "timestamp": "2026-07-05T09:46:17.784385+00:00"
+  "final_output": "The evasion report for the \"jailbreak\" detector is not available locally or on the Hugging Face Hub. Please ensure the report is accessible or provide the necessary data to proceed with the analysis.",
+  "timestamp": "2026-07-05T10:11:43.188164+00:00"
 }
