@@ -219,7 +219,8 @@ def _download_results(agent: str, round_num: int):
 
         result_files = {
             "red_team":     [f"results/round_{round_num}_samples.json",
-                             f"agent_traces/round_{round_num}_red_team.json"],
+                             f"agent_traces/round_{round_num}_red_team.json",
+                             f"agent_workspace/red_to_orchestrator.json"],
             "blue_team":    [f"agent_workspace/blue_to_orchestrator.json",
                              f"agent_traces/round_{round_num}_blue_team.json"],
             "orchestrator": [f"results/pipeline_decision.json",
