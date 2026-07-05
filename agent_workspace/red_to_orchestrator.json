@@ -15,11 +15,7 @@
       }
     ],
     "invalid_samples": [],
-    "total_samples": 1,
-    "valid_samples_count": 1,
-    "invalid_samples_count": 0,
-    "round": 1,
-    "current_focus": "roleplay_framing"
+    "summary": "Generated 1 valid adversarial sample using roleplay_framing family for round 1"
   },
-  "timestamp": "2026-07-05T13:56:03.328354+00:00"
+  "timestamp": "2026-07-05T14:18:52.512015+00:00"
 }
