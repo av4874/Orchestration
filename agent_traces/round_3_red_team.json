@@ -1,0 +1,10 @@
+{
+  "round": 3,
+  "mode": "live_qwen3",
+  "agent": "red_team",
+  "model": "Qwen/Qwen3-8B-INT4",
+  "total_tokens": 606,
+  "steps": 9,
+  "final_output": "The attack cycle for round 3 has been completed. The final report has been sent to the orchestrator with the generated samples and validation results. The samples were validated successfully, and the action taken was `emergency_rollback`. Let me know if there are any further instructions or if another round is needed.",
+  "timestamp": "2026-07-10T20:53:34.815143+00:00"
+}
