@@ -249,6 +249,11 @@ def validate_samples(samples_json: str) -> str:
     results = []
     valid, invalid = [], []
     for i, s in enumerate(samples):
+        # Coerce common LLM type errors before validation
+        if isinstance(s.get("expected_evasion"), str):
+            s["expected_evasion"] = s["expected_evasion"].strip().lower() not in ("false", "0", "no", "")
+        if not s.get("attack_family") or s.get("attack_family") == "unknown":
+            s["attack_family"] = s.get("family", s.get("attack_family", "unknown"))
         try:
             validate(instance=s, schema=SAMPLE_SCHEMA)
             valid.append(s)
