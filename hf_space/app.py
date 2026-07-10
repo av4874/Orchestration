@@ -566,6 +566,61 @@ _DETECTOR_COLORS = {
     "indirect_injection": "#06b6d4",
 }
 
+_DETECTOR_REPOS = {
+    "injection":          "Builder117/distilbert-prompt-injection",
+    "jailbreak":          "Builder117/distilbert-jailbreak",
+    "insecure_output":    "Builder117/distilbert-insecure-output",
+    "indirect_injection": "Builder117/distilbert-indirect-injection",
+}
+
+def _sparkline(values, width=200, height=50, color="#6366f1", invert=False):
+    """SVG polyline sparkline. invert=True means lower=better (evasion)."""
+    if len(values) < 2:
+        if len(values) == 1:
+            v = values[0]
+            pct = int((1 - v if invert else v) * 100)
+            return (f'<svg width="{width}" height="{height}" style="display:block">'
+                    f'<line x1="0" y1="{height//2}" x2="{width}" y2="{height//2}" '
+                    f'stroke="{color}" stroke-width="2" stroke-dasharray="4,4"/>'
+                    f'<circle cx="{width//2}" cy="{height//2}" r="4" fill="{color}"/>'
+                    f'</svg>')
+        return f'<svg width="{width}" height="{height}"></svg>'
+    lo, hi = min(values), max(values)
+    span = hi - lo if hi != lo else 1.0
+    pts = []
+    for i, v in enumerate(values):
+        x = int(i / (len(values) - 1) * (width - 8)) + 4
+        norm = (v - lo) / span
+        y_frac = (1 - norm) if not invert else norm
+        y = int(4 + y_frac * (height - 8))
+        pts.append(f"{x},{y}")
+    polyline = " ".join(pts)
+    # area fill
+    first_x, first_y = pts[0].split(",")
+    last_x,  last_y  = pts[-1].split(",")
+    area_pts = f"{first_x},{height} " + polyline + f" {last_x},{height}"
+    return (
+        f'<svg width="{width}" height="{height}" style="display:block;overflow:visible">'
+        f'<defs><linearGradient id="sg{abs(hash(color))%9999}" x1="0" y1="0" x2="0" y2="1">'
+        f'<stop offset="0%" stop-color="{color}" stop-opacity=".25"/>'
+        f'<stop offset="100%" stop-color="{color}" stop-opacity=".02"/>'
+        f'</linearGradient></defs>'
+        f'<polygon points="{area_pts}" fill="url(#sg{abs(hash(color))%9999})"/>'
+        f'<polyline points="{polyline}" fill="none" stroke="{color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>'
+        + "".join(f'<circle cx="{p.split(",")[0]}" cy="{p.split(",")[1]}" r="3.5" fill="{color}" stroke="#fff" stroke-width="1.5"/>' for p in pts)
+        + f'</svg>'
+    )
+
+def _round_labels(rounds_list, width=200):
+    """X-axis round number labels for sparkline."""
+    if len(rounds_list) < 2:
+        return ""
+    pts = []
+    for i, r in enumerate(rounds_list):
+        x = int(i / (len(rounds_list) - 1) * (width - 8)) + 4
+        pts.append(f'<text x="{x}" y="12" text-anchor="middle" font-size="9" fill="#94a3b8">R{r}</text>')
+    return f'<svg width="{width}" height="14" style="display:block">{"".join(pts)}</svg>'
+
 def render_model_progress():
     lineage = load_lineage()
     rounds  = lineage.get("rounds", [])
@@ -579,120 +634,196 @@ def render_model_progress():
   The orchestrator must decide <code>retrain</code> or <code>partial_retrain</code> to trigger a Kaggle T4 run.</div>
 </div>"""
 
-    # Summary cards
-    total_rounds    = len(rounds)
-    all_detectors   = sorted({det for r in rounds for det in r.get("detectors", {})})
-    total_retrains  = sum(len(r.get("detectors", {})) for r in rounds)
+    all_detectors  = sorted({det for r in rounds for det in r.get("detectors", {})})
+    total_retrains = sum(len(r.get("detectors", {})) for r in rounds)
 
-    # Evasion improvement per detector across rounds (latest pre vs post)
-    det_improvements = {}
+    # Per-detector history: collect F1 and evasion series across rounds
+    det_history = {}  # det -> {rounds:[], f1:[], evasion_before:[], evasion_after:[], latest_model, latest_f1, ...}
     for det in all_detectors:
-        pre_vals  = [r["detectors"][det]["pre_evasion"]  for r in rounds if det in r.get("detectors",{}) and r["detectors"][det]["pre_evasion"]  is not None]
-        post_vals = [r["detectors"][det]["post_evasion"] for r in rounds if det in r.get("detectors",{}) and r["detectors"][det]["post_evasion"] is not None]
-        if pre_vals and post_vals:
-            det_improvements[det] = (pre_vals[-1], post_vals[-1])
+        rnums, f1s, ev_before, ev_after = [], [], [], []
+        latest_model = _DETECTOR_REPOS.get(det, "")
+        for r in rounds:
+            info = r.get("detectors", {}).get(det)
+            if not info:
+                continue
+            rnums.append(r.get("round", "?"))
+            # F1 may be stored per-detector (new format) or at round level (old format)
+            f1 = info.get("eval_f1") or r.get("eval_f1")
+            f1s.append(f1 if f1 is not None else 0.0)
+            eb = info.get("pre_evasion")
+            ea = info.get("post_evasion")
+            ev_before.append(eb if eb is not None else 0.0)
+            ev_after.append(ea if ea is not None else 0.0)
+            if info.get("hf_model"):
+                latest_model = info["hf_model"]
+        det_history[det] = {
+            "rounds": rnums, "f1": f1s,
+            "evasion_before": ev_before, "evasion_after": ev_after,
+            "latest_model": latest_model,
+            "latest_f1": f1s[-1] if f1s else None,
+            "latest_pre": ev_before[-1] if ev_before else None,
+            "latest_post": ev_after[-1] if ev_after else None,
+            "times_retrained": len(rnums),
+        }
 
+    improved = sum(
+        1 for dh in det_history.values()
+        if dh["latest_pre"] is not None and dh["latest_post"] is not None
+        and dh["latest_post"] < dh["latest_pre"]
+    )
+
+    # ── Summary KPI strip ──────────────────────────────────────────────────────
     summary_cards = f"""
 <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">
-  <div style="flex:1;min-width:120px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:14px 18px">
+  <div style="flex:1;min-width:110px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:14px 18px">
     <div style="font-size:.72em;color:#3b82f6;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Retrain Rounds</div>
-    <div style="font-size:2em;font-weight:800;color:#1d4ed8">{total_rounds}</div>
+    <div style="font-size:2em;font-weight:800;color:#1d4ed8">{len(rounds)}</div>
   </div>
-  <div style="flex:1;min-width:120px;background:#fdf4ff;border:1px solid #e9d5ff;border-radius:12px;padding:14px 18px">
-    <div style="font-size:.72em;color:#9333ea;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Models Fine-tuned</div>
+  <div style="flex:1;min-width:110px;background:#fdf4ff;border:1px solid #e9d5ff;border-radius:12px;padding:14px 18px">
+    <div style="font-size:.72em;color:#9333ea;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Model Updates</div>
     <div style="font-size:2em;font-weight:800;color:#7e22ce">{total_retrains}</div>
   </div>
-  <div style="flex:1;min-width:120px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:14px 18px">
-    <div style="font-size:.72em;color:#16a34a;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Detectors Improved</div>
-    <div style="font-size:2em;font-weight:800;color:#15803d">{sum(1 for pre,post in det_improvements.values() if post < pre)}</div>
+  <div style="flex:1;min-width:110px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:14px 18px">
+    <div style="font-size:.72em;color:#16a34a;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Improved</div>
+    <div style="font-size:2em;font-weight:800;color:#15803d">{improved}/{len(all_detectors)}</div>
   </div>
-  <div style="flex:1;min-width:120px;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:14px 18px">
+  <div style="flex:1;min-width:110px;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:14px 18px">
     <div style="font-size:.72em;color:#ea580c;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Latest Round</div>
     <div style="font-size:2em;font-weight:800;color:#c2410c">{rounds[-1]['round']}</div>
   </div>
 </div>"""
 
-    # Per-detector evasion improvement section
-    det_section = ""
-    if det_improvements:
-        bars = ""
-        for det, (pre, post) in det_improvements.items():
-            color = _DETECTOR_COLORS.get(det, "#6366f1")
-            delta_html = _delta_badge(pre, post)
-            bars += f"""
-<div style="margin-bottom:18px;padding:14px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-    <span style="font-weight:700;color:#0f172a;font-size:.9em">{det.replace("_"," ").title()}</span>
-    {delta_html}
-  </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    # ── Per-detector model cards with sparklines ───────────────────────────────
+    det_cards = ""
+    for det in all_detectors:
+        dh    = det_history[det]
+        color = _DETECTOR_COLORS.get(det, "#6366f1")
+        repo  = dh["latest_model"] or _DETECTOR_REPOS.get(det, "")
+        repo_name = repo.split("/")[-1] if repo else det
+        hf_url    = f"https://huggingface.co/{repo}" if repo else "#"
+
+        latest_f1   = dh["latest_f1"]
+        latest_pre  = dh["latest_pre"]
+        latest_post = dh["latest_post"]
+        n_retrained = dh["times_retrained"]
+
+        f1_color = "#10b981" if (latest_f1 or 0) >= 0.7 else "#f97316" if (latest_f1 or 0) >= 0.5 else "#ef4444"
+        delta_html = _delta_badge(latest_pre, latest_post)
+
+        # Sparklines
+        spark_f1     = _sparkline(dh["f1"],           200, 48, color)           if len(dh["f1"]) >= 1 else ""
+        spark_evasion = _sparkline(dh["evasion_after"], 200, 48, "#ef4444", invert=True) if len(dh["evasion_after"]) >= 1 else ""
+        round_labels = _round_labels(dh["rounds"], 200)
+
+        f1_str  = f"{latest_f1:.3f}" if latest_f1 is not None else "—"
+        pre_str = f"{latest_pre:.0%}"  if latest_pre  is not None else "—"
+        post_str = f"{latest_post:.0%}" if latest_post is not None else "—"
+
+        det_cards += f"""
+<div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px 20px;border-top:4px solid {color}">
+  <!-- Header -->
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:6px">
     <div>
-      <div style="font-size:.72em;color:#64748b;font-weight:600;margin-bottom:4px">BEFORE retrain</div>
-      {_pct_bar(pre, 200, "#ef4444")}
+      <div style="font-size:1em;font-weight:800;color:#0f172a">{det.replace("_"," ").title()}</div>
+      <a href="{hf_url}" target="_blank"
+         style="font-size:.72em;color:{color};font-family:monospace;text-decoration:none;font-weight:600">
+        🤗 {repo_name}
+      </a>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      {delta_html}
+      <span style="background:{color}15;border:1px solid {color}44;border-radius:10px;padding:2px 8px;font-size:.72em;color:{color};font-weight:700">
+        ×{n_retrained} retrained
+      </span>
+    </div>
+  </div>
+
+  <!-- Latest metrics row -->
+  <div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+    <div style="text-align:center;background:#f8fafc;border-radius:8px;padding:8px 14px;min-width:52px">
+      <div style="font-size:.65em;color:#64748b;font-weight:700;text-transform:uppercase">F1</div>
+      <div style="font-size:1.3em;font-weight:800;color:{f1_color}">{f1_str}</div>
+    </div>
+    <div style="text-align:center;background:#fef2f2;border-radius:8px;padding:8px 14px;min-width:52px">
+      <div style="font-size:.65em;color:#64748b;font-weight:700;text-transform:uppercase">Evasion Before</div>
+      <div style="font-size:1.3em;font-weight:800;color:#ef4444">{pre_str}</div>
+    </div>
+    <div style="text-align:center;background:#f0fdf4;border-radius:8px;padding:8px 14px;min-width:52px">
+      <div style="font-size:.65em;color:#64748b;font-weight:700;text-transform:uppercase">Evasion After</div>
+      <div style="font-size:1.3em;font-weight:800;color:#10b981">{post_str}</div>
+    </div>
+  </div>
+
+  <!-- Sparklines side by side -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div>
+      <div style="font-size:.67em;color:#64748b;font-weight:700;text-transform:uppercase;margin-bottom:4px">F1 Score over rounds</div>
+      {spark_f1}
+      {round_labels}
     </div>
     <div>
-      <div style="font-size:.72em;color:#64748b;font-weight:600;margin-bottom:4px">AFTER retrain</div>
-      {_pct_bar(post, 200, "#10b981" if post < pre else "#ef4444")}
+      <div style="font-size:.67em;color:#64748b;font-weight:700;text-transform:uppercase;margin-bottom:4px">Evasion rate after retrain</div>
+      {spark_evasion}
+      {round_labels}
     </div>
   </div>
-</div>"""
-        det_section = f"""
-<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:18px;margin-bottom:16px">
-  <div style="font-size:.8em;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px">
-    Evasion Rate: Before vs After Fine-tune (latest values per detector)
-  </div>
-  {bars}
 </div>"""
 
-    # Round-by-round timeline
+    det_grid = f"""
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-bottom:20px">
+  {det_cards}
+</div>"""
+
+    # ── Round-by-round timeline ────────────────────────────────────────────────
     timeline_rows = ""
     for r in reversed(rounds):
-        rnum        = r.get("round", "?")
-        ts          = r.get("timestamp", "")[:10]
-        family      = r.get("attack_family", "unknown")
-        argo        = r.get("argo_workflow", "—")
-        dets        = r.get("detectors", {})
-        eval_f1     = r.get("eval_f1")
-        eval_acc    = r.get("eval_accuracy")
-        eval_loss   = r.get("eval_loss")
-        train_size  = r.get("train_size")
-        out_model   = r.get("output_model", "")
+        rnum       = r.get("round", "?")
+        ts         = r.get("timestamp", "")[:10]
+        family     = r.get("attack_family", "unknown")
+        argo       = r.get("argo_workflow", "—")
+        dets       = r.get("detectors", {})
+        eval_f1    = r.get("eval_f1")
+        eval_acc   = r.get("eval_accuracy")
+        eval_loss  = r.get("eval_loss")
+        train_size = r.get("train_size")
 
-        # Eval metrics row (retrain_kernel format)
         eval_row = ""
         if eval_f1 is not None:
             f1_color  = "#10b981" if eval_f1 >= 0.7 else "#f97316" if eval_f1 >= 0.5 else "#ef4444"
             acc_color = "#10b981" if (eval_acc or 0) >= 0.75 else "#f97316"
             eval_row = f"""
 <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;padding:10px 14px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
-  <div style="text-align:center;min-width:60px">
-    <div style="font-size:.68em;color:#64748b;font-weight:700;text-transform:uppercase">F1</div>
+  <div style="text-align:center;min-width:58px">
+    <div style="font-size:.67em;color:#64748b;font-weight:700;text-transform:uppercase">Avg F1</div>
     <div style="font-size:1.2em;font-weight:800;color:{f1_color}">{eval_f1:.3f}</div>
   </div>
-  {"<div style='text-align:center;min-width:60px'><div style='font-size:.68em;color:#64748b;font-weight:700;text-transform:uppercase'>Accuracy</div><div style='font-size:1.2em;font-weight:800;color:" + acc_color + "'>" + f"{eval_acc:.1%}" + "</div></div>" if eval_acc is not None else ""}
-  {"<div style='text-align:center;min-width:60px'><div style='font-size:.68em;color:#64748b;font-weight:700;text-transform:uppercase'>Loss</div><div style='font-size:1.2em;font-weight:800;color:#64748b'>" + f"{eval_loss:.4f}" + "</div></div>" if eval_loss is not None else ""}
-  {"<div style='text-align:center;min-width:60px'><div style='font-size:.68em;color:#64748b;font-weight:700;text-transform:uppercase'>Train samples</div><div style='font-size:1.2em;font-weight:800;color:#4f46e5'>" + str(train_size) + "</div></div>" if train_size is not None else ""}
-  {"<div style='margin-left:auto;font-size:.72em;color:#94a3b8;font-family:monospace;align-self:center'>" + out_model.split('/')[-1] + "</div>" if out_model else ""}
+  {"<div style='text-align:center;min-width:58px'><div style='font-size:.67em;color:#64748b;font-weight:700;text-transform:uppercase'>Avg Acc</div><div style='font-size:1.2em;font-weight:800;color:" + acc_color + "'>" + f"{eval_acc:.1%}" + "</div></div>" if eval_acc is not None else ""}
+  {"<div style='text-align:center;min-width:58px'><div style='font-size:.67em;color:#64748b;font-weight:700;text-transform:uppercase'>Avg Loss</div><div style='font-size:1.2em;font-weight:800;color:#64748b'>" + f"{eval_loss:.4f}" + "</div></div>" if eval_loss is not None else ""}
+  {"<div style='text-align:center;min-width:58px'><div style='font-size:.67em;color:#64748b;font-weight:700;text-transform:uppercase'>Train samples</div><div style='font-size:1.2em;font-weight:800;color:#4f46e5'>" + str(train_size) + "</div></div>" if train_size is not None else ""}
 </div>"""
 
         det_pills = ""
         for det, info in dets.items():
-            color = _DETECTOR_COLORS.get(det, "#6366f1")
+            dc    = _DETECTOR_COLORS.get(det, "#6366f1")
             pre   = info.get("pre_evasion")
             post  = info.get("post_evasion")
-            model = info.get("hf_model", "—").split("/")[-1]
+            model = info.get("hf_model", "—")
+            repo_short = model.split("/")[-1] if model else "—"
+            hf_url = f"https://huggingface.co/{model}" if model and "/" in model else "#"
             delta = _delta_badge(pre, post)
             det_pills += f"""
-<div style="background:{color}11;border:1px solid {color}44;border-radius:8px;padding:8px 12px;margin-bottom:6px">
-  <div style="display:flex;justify-content:space-between;align-items:center">
-    <span style="font-size:.82em;font-weight:700;color:{color}">{det.replace("_"," ").title()}</span>
+<div style="background:{dc}0d;border:1px solid {dc}33;border-radius:8px;padding:8px 12px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+    <span style="font-size:.82em;font-weight:700;color:{dc}">{det.replace("_"," ").title()}</span>
     {delta}
   </div>
-  <div style="font-size:.75em;color:#64748b;margin-top:2px">
-    {_pct_bar(pre, 80, "#ef4444") if pre is not None else "pre: n/a"} →
-    {_pct_bar(post, 80, "#10b981") if post is not None else "post: n/a"}
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">
+    {_pct_bar(pre, 70, "#ef4444") if pre is not None else '<span style="font-size:.75em;color:#94a3b8">pre n/a</span>'}
+    <span style="font-size:.75em;color:#94a3b8">→</span>
+    {_pct_bar(post, 70, "#10b981" if (post or 1) < (pre or 1) else "#ef4444") if post is not None else '<span style="font-size:.75em;color:#94a3b8">post n/a</span>'}
   </div>
-  <div style="font-size:.72em;color:#94a3b8;margin-top:4px;font-family:monospace">{model}</div>
+  <a href="{hf_url}" target="_blank"
+     style="font-size:.68em;color:{dc};font-family:monospace;text-decoration:none">🤗 {repo_short}</a>
 </div>"""
 
         timeline_rows += f"""
@@ -703,16 +834,12 @@ def render_model_progress():
       <span style="font-size:.78em;color:#94a3b8;margin-left:10px">{ts}</span>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
-      <span style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:3px 10px;font-size:.75em;color:#1d4ed8;font-weight:600">
-        attack: {family}
-      </span>
-      <span style="background:#fdf4ff;border:1px solid #e9d5ff;border-radius:12px;padding:3px 10px;font-size:.75em;color:#7e22ce;font-weight:600">
-        argo: {argo}
-      </span>
+      <span style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:3px 10px;font-size:.75em;color:#1d4ed8;font-weight:600">attack: {family}</span>
+      <span style="background:#fdf4ff;border:1px solid #e9d5ff;border-radius:12px;padding:3px 10px;font-size:.75em;color:#7e22ce;font-weight:600">argo: {argo}</span>
     </div>
   </div>
   {eval_row}
-  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px">
     {det_pills if det_pills else '<span style="color:#94a3b8;font-size:.85em">No detector data</span>'}
   </div>
 </div>"""
@@ -720,8 +847,13 @@ def render_model_progress():
     return f"""
 <div style="font-family:'Inter','Segoe UI',sans-serif;padding:8px 0">
   {summary_cards}
-  {det_section}
-  <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:18px;margin-bottom:12px">
+  <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:18px;margin-bottom:18px">
+    <div style="font-size:.8em;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px">
+      Detector Models — Training Progress
+    </div>
+    {det_grid}
+  </div>
+  <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:18px">
     <div style="font-size:.8em;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px">
       Fine-tune History (newest first)
     </div>
