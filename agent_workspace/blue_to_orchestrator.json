@@ -6,17 +6,15 @@
   "body": {
     "retrain": true,
     "weakness_scores": {
-      "jailbreak": {
-        "roleplay_framing": 1.0
-      },
-      "insecure_output": {
-        "roleplay_framing": 1.0
-      }
+      "jailbreak": 1.0,
+      "insecure_output": 1.0,
+      "indirect_injection": 1.0
     },
     "detectors_to_retrain": [
       "jailbreak",
-      "insecure_output"
+      "insecure_output",
+      "indirect_injection"
     ]
   },
-  "timestamp": "2026-07-10T20:57:36.530026+00:00"
+  "timestamp": "2026-07-10T21:17:04.307800+00:00"
 }
