@@ -314,25 +314,18 @@ jobs:
         continue-on-error: true
 
       - name: Commit Phase 2 results to master
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ROUND: ${{ needs.phase1-generate.outputs.round }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          echo "=== Files present ==="
-          ls -la results/ || true
-          ls -la pipeline/attack_memory.json || true
-          echo "=== git status before add ==="
-          git status --short
-          git add --force --ignore-missing \
-            results/evasion_report.json \
-            results/pipeline_decision.json \
-            results/retrain_report.json \
-            pipeline/attack_memory.json
+          git add --force results/evasion_report.json || true
+          git add --force results/pipeline_decision.json || true
+          git add --force results/retrain_report.json || true
+          git add --force pipeline/attack_memory.json || true
           git add --force agent_traces/ || true
-          echo "=== git status after add ==="
-          git status --short
           git diff --cached --quiet && echo "Nothing to commit" && exit 0
           git commit -m "chore: round-${ROUND} phase2 — evasion scored, orchestrator decided"
           git pull --rebase origin master
