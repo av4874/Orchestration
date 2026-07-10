@@ -242,7 +242,7 @@ jobs:
           ROUND="${{ needs.phase1-generate.outputs.round }}"
           ACTION=$(python -c "import json,os; p='results/pipeline_decision.json'; print(json.load(open(p))['action'] if os.path.exists(p) else 'skip')" 2>/dev/null || echo "skip")
           echo "Orchestrator action: $ACTION"
-          if [ "$ACTION" = "retrain" ] || [ "$ACTION" = "partial_retrain" ] || [ "$ACTION" = "emergency_rollback" ]; then
+          if [ "$ACTION" = "retrain" ] || [ "$ACTION" = "partial_retrain" ]; then
             echo "Action=$ACTION — running DistilBERT fine-tune on Kaggle T4..."
             python pipeline/trigger_agents.py --agent retrain --round $ROUND
           else

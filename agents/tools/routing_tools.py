@@ -15,13 +15,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 RESULTS_DIR = Path(os.environ.get("ENTERPRISE_ROOT", ".")) / "results"
 WORKSPACE = Path(os.environ.get("ENTERPRISE_ROOT", ".")) / "agent_workspace"
 
-VALID_ACTIONS = ["retrain", "partial_retrain", "fast_promote", "emergency_rollback", "skip"]
-VALID_WORKFLOWS = ["full-canary", "fast-promote", "emergency-rollback", "none"]
-VALID_SEVERITIES = ["critical", "high", "medium", "low", "none"]
-
-ARGO_API_URL = os.environ.get("ARGO_URL", os.environ.get("ARGO_API_URL", "http://localhost:2746"))
-ARGO_TOKEN = os.environ.get("ARGO_TOKEN", "")
-ARGO_NAMESPACE = os.environ.get("ARGO_NAMESPACE", "argo")
+VALID_ACTIONS = ["retrain", "partial_retrain", "skip"]
 
 
 @tool
@@ -30,14 +24,16 @@ def decide_routing(decision_json: str) -> str:
     Write pipeline_decision.json — the Orchestrator's final routing call.
     Input JSON: {
       "round": 1,
-      "action": "retrain",               # retrain/partial_retrain/fast_promote/emergency_rollback/skip
-      "models_to_retrain": ["injection"], # list of detector names
-      "severity": "high",                 # critical/high/medium/low/none
+      "action": "retrain",               # retrain / partial_retrain / skip
+      "models_to_retrain": ["injection"], # list of detector names to retrain (empty for skip)
       "confidence": 0.91,                 # float 0-1
-      "argo_workflow": "full-canary",     # full-canary/fast-promote/emergency-rollback/none
-      "reason": "...",                    # free text
-      "next_attack_families": []          # families for next round
+      "reason": "...",                    # free text explaining the decision
+      "next_attack_families": []          # families to target next round
     }
+    action rules:
+      retrain        — evasion >= 0.40 on any detector, OR multiple detectors >= 0.25
+      partial_retrain — evasion 0.25-0.40 on one detector
+      skip           — all detectors evasion < 0.25
     """
     try:
         decision = json.loads(decision_json)
@@ -48,14 +44,6 @@ def decide_routing(decision_json: str) -> str:
     if action not in VALID_ACTIONS:
         return f"ERROR: action must be one of {VALID_ACTIONS}, got '{action}'"
 
-    workflow = decision.get("argo_workflow", "none")
-    if workflow not in VALID_WORKFLOWS:
-        return f"ERROR: argo_workflow must be one of {VALID_WORKFLOWS}, got '{workflow}'"
-
-    severity = decision.get("severity", "none")
-    if severity not in VALID_SEVERITIES:
-        return f"ERROR: severity must be one of {VALID_SEVERITIES}, got '{severity}'"
-
     decision["timestamp"] = datetime.now(timezone.utc).isoformat()
     decision.setdefault("models_to_retrain", [])
     decision.setdefault("next_attack_families", [])
@@ -65,11 +53,10 @@ def decide_routing(decision_json: str) -> str:
     out_path = RESULTS_DIR / "pipeline_decision.json"
     out_path.write_text(json.dumps(decision, indent=2), encoding="utf-8")
 
-    # Also write to agent_workspace for Orchestrator self-reference
     WORKSPACE.mkdir(parents=True, exist_ok=True)
     (WORKSPACE / "orchestrator_decision.json").write_text(json.dumps(decision, indent=2), encoding="utf-8")
 
-    return f"Decision written — action={action}, severity={severity}, workflow={workflow}, confidence={decision.get('confidence')}"
+    return f"Decision written — action={action}, confidence={decision.get('confidence')}, retrain={decision.get('models_to_retrain')}"
 
 
 @tool
