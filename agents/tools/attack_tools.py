@@ -159,20 +159,15 @@ def generate_samples(family: str = "unicode_homograph", count: int = 5, round: i
     except (TypeError, ValueError) as e:
         return f"ERROR: count and round must be integers — {e}"
 
-    # Dataset-backed path — free, no router credits
+    # Dataset-backed path — free, no router credits; falls through to live on failure
     if HF_DATASET and not os.environ.get("FORCE_LIVE"):
         try:
             samples = _generate_from_dataset(family, count, round_num)
             return json.dumps({"samples": samples, "family": family, "count": len(samples)}, indent=2)
         except Exception as e:
-            return f"ERROR: dataset pull failed for family='{family}' from {HF_DATASET}: {e}"
+            print(f"WARNING: dataset pull failed for family='{family}' ({e}) — using live generation")
+            # fall through to live generation below
 
-    if not HF_DATASET and not os.environ.get("FORCE_LIVE"):
-        return (
-            "ERROR: ADVERSARIAL_DATASET env var not set. "
-            "Set it to Builder117/enterprise-adversarial-samples and re-run. "
-            "Do NOT fall back to live generation."
-        )
     detector = ATTACK_FAMILIES.get(family, "injection")
 
     sys_prompt = (
