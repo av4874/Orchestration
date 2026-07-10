@@ -427,8 +427,7 @@ def load_status():
         "round": 0, "status": "no data",
         "red_team": {"families_tried": []},
         "blue_team": {"weakness_scores": {}, "retrain_priority": []},
-        "orchestrator": {"action": "none", "severity": "none", "confidence": None,
-                         "argo_workflow": "none", "reason": "No data yet."},
+        "orchestrator": {"action": "none", "confidence": None, "reason": "No data yet."},
     }
 
 def load_lineage():
@@ -487,9 +486,9 @@ def render_dashboard():
     blue = s.get("blue_team", {})
     red  = s.get("red_team", {})
 
-    sev_color = {"high": "#ef4444", "medium": "#f97316", "low": "#10b981", "none": "#94a3b8"}.get(
-        orch.get("severity", "none"), "#94a3b8")
-    action_badge = orch.get("action", "none").upper()
+    action = orch.get("action", "none")
+    action_badge = action.upper()
+    action_color = {"retrain": "#ef4444", "partial_retrain": "#f97316", "skip": "#94a3b8"}.get(action, "#94a3b8")
     conf = orch.get("confidence")
     conf_str = f"{conf:.0%}" if conf is not None else "—"
 
@@ -509,7 +508,6 @@ def render_dashboard():
     ) or "  (no attacks run yet)"
 
     retrain = ", ".join(blue.get("retrain_priority", [])) or "none"
-    argo = orch.get("argo_workflow", "—")
 
     html = f"""
 <div style="font-family:'Inter','Segoe UI',sans-serif;padding:8px 0">
@@ -520,23 +518,15 @@ def render_dashboard():
     </div>
     <div style="flex:1;min-width:140px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px 20px">
       <div style="font-size:.75em;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Decision</div>
-      <div style="font-size:1.3em;font-weight:800;color:{sev_color};line-height:1.2">{action_badge}</div>
-    </div>
-    <div style="flex:1;min-width:140px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px 20px">
-      <div style="font-size:.75em;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Severity</div>
-      <div style="font-size:1.3em;font-weight:800;color:{sev_color}">{orch.get("severity","—").upper()}</div>
+      <div style="font-size:1.3em;font-weight:800;color:{action_color};line-height:1.2">{action_badge}</div>
     </div>
     <div style="flex:1;min-width:140px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px 20px">
       <div style="font-size:.75em;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Confidence</div>
       <div style="font-size:1.3em;font-weight:800;color:#0f172a">{conf_str}</div>
     </div>
-    <div style="flex:1;min-width:180px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px 20px">
-      <div style="font-size:.75em;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Argo DAG</div>
-      <div style="font-size:1.05em;font-weight:700;color:#0f172a">{argo}</div>
-    </div>
   </div>
 
-  <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:18px 22px;margin-bottom:16px;border-left:4px solid {sev_color}">
+  <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:18px 22px;margin-bottom:16px;border-left:4px solid {action_color}">
     <div style="font-size:.8em;color:#94a3b8;font-weight:700;text-transform:uppercase;margin-bottom:6px">Orchestrator Reasoning</div>
     <div style="color:#1e293b;font-size:.95em;line-height:1.6">{orch.get("reason","—")}</div>
   </div>
@@ -780,7 +770,6 @@ def render_model_progress():
         rnum       = r.get("round", "?")
         ts         = r.get("timestamp", "")[:10]
         family     = r.get("attack_family", "unknown")
-        argo       = r.get("argo_workflow", "—")
         dets       = r.get("detectors", {})
         eval_f1    = r.get("eval_f1")
         eval_acc   = r.get("eval_accuracy")
@@ -833,10 +822,9 @@ def render_model_progress():
       <span style="font-size:1.2em;font-weight:800;color:#4f46e5">Round {rnum}</span>
       <span style="font-size:.78em;color:#94a3b8;margin-left:10px">{ts}</span>
     </div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap">
-      <span style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:3px 10px;font-size:.75em;color:#1d4ed8;font-weight:600">attack: {family}</span>
-      <span style="background:#fdf4ff;border:1px solid #e9d5ff;border-radius:12px;padding:3px 10px;font-size:.75em;color:#7e22ce;font-weight:600">argo: {argo}</span>
-    </div>
+    <span style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:3px 10px;font-size:.75em;color:#1d4ed8;font-weight:600">
+      attack: {family}
+    </span>
   </div>
   {eval_row}
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px">
@@ -952,8 +940,7 @@ def render_attack_analysis():
     retrain_priority = blue.get("retrain_priority", [])
     action = orch.get("action", "none")
     reason = orch.get("reason", "—")
-    action_color = {"retrain": "#ef4444", "partial_retrain": "#f97316", "fast_promote": "#10b981",
-                    "skip": "#94a3b8", "emergency_rollback": "#dc2626"}.get(action, "#94a3b8")
+    action_color = {"retrain": "#ef4444", "partial_retrain": "#f97316", "skip": "#94a3b8"}.get(action, "#94a3b8")
 
     decision_html = f"""
 <div style="background:#fff;border:1px solid #e2e8f0;border-left:4px solid {action_color};border-radius:0 12px 12px 0;padding:16px 20px;margin-bottom:16px">
@@ -1069,8 +1056,7 @@ def render_blue_analysis():
     reason = orch.get("reason", "—")
     conf = orch.get("confidence")
     conf_str = f"{conf:.0%}" if conf is not None else "—"
-    action_color = {"retrain": "#ef4444", "partial_retrain": "#f97316", "fast_promote": "#10b981",
-                    "skip": "#94a3b8", "emergency_rollback": "#dc2626"}.get(action, "#94a3b8")
+    action_color = {"retrain": "#ef4444", "partial_retrain": "#f97316", "skip": "#94a3b8"}.get(action, "#94a3b8")
 
     reco_html = f"""
 <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:18px 20px;margin-top:16px">
@@ -1115,9 +1101,7 @@ def render_orchestrator():
         f'</div>'
         for lbl, col, val in [
             ("Action",     "#a5b4fc", s["orchestrator"]["action"].upper()),
-            ("Severity",   "#f472b6", s["orchestrator"]["severity"].upper()),
             ("Confidence", "#e2e8f0", f'{s["orchestrator"]["confidence"]:.0%}' if s["orchestrator"]["confidence"] else "—"),
-            ("Argo DAG",   "#93c5fd", s["orchestrator"]["argo_workflow"]),
         ]
     )}
   </div>
@@ -1244,7 +1228,7 @@ with gr.Blocks(title="Adversarial Guardrail", css=CSS, theme=gr.themes.Soft()) a
         with gr.Tab("🤖 Orchestrator"):
             gr.HTML("""<div style="background:#1e293b;border:1px solid #334155;border-left:4px solid #a855f7;border-radius:12px;padding:16px 20px;margin-bottom:16px">
               <h3 style="margin:0 0 4px;color:#d8b4fe;font-size:1.05em">🤖 Pipeline Orchestrator Agent</h3>
-              <p style="margin:0;color:#94a3b8;font-size:.88em">Reads Red+Blue agent outputs, decides pipeline routing, selects Argo DAG variant, writes pipeline_decision.json.
+              <p style="margin:0;color:#94a3b8;font-size:.88em">Reads Red+Blue agent outputs, decides whether to retrain detectors, writes pipeline_decision.json.
               Uses ReAct loop with confidence threshold before committing to a decision. Decision history tracked across all rounds.</p>
             </div>""")
             orch_html = gr.HTML(render_orchestrator())
