@@ -294,6 +294,25 @@ jobs:
           print(f'attack_memory updated — round {round_num}, action={action}, evasion={evasion_rate:.2%}')
           "
 
+      - name: Push attack_memory to HF Hub (source of truth for round counter)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python -c "
+          import os
+          from huggingface_hub import upload_file
+          upload_file(
+              path_or_fileobj='pipeline/attack_memory.json',
+              path_in_repo='pipeline/attack_memory.json',
+              repo_id='Builder117/enterprise-adversarial-samples',
+              repo_type='dataset',
+              token=os.environ['HF_TOKEN'],
+              commit_message='chore: update attack_memory round ${{ needs.phase1-generate.outputs.round }}',
+          )
+          print('Pushed attack_memory.json to HF Hub')
+          "
+        continue-on-error: true
+
       - name: Commit Phase 2 results to master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
