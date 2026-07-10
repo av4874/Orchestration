@@ -325,10 +325,9 @@ jobs:
           ls -la pipeline/attack_memory.json || true
           echo "=== git status before add ==="
           git status --short
-          git add --force \
+          git add --force --ignore-missing \
             results/evasion_report.json \
             results/pipeline_decision.json \
-            results/pipeline_env.sh \
             results/retrain_report.json \
             pipeline/attack_memory.json
           git add --force agent_traces/ || true
