@@ -647,11 +647,33 @@ def render_model_progress():
     # Round-by-round timeline
     timeline_rows = ""
     for r in reversed(rounds):
-        rnum   = r.get("round", "?")
-        ts     = r.get("timestamp", "")[:10]
-        family = r.get("attack_family", "unknown")
-        argo   = r.get("argo_workflow", "—")
-        dets   = r.get("detectors", {})
+        rnum        = r.get("round", "?")
+        ts          = r.get("timestamp", "")[:10]
+        family      = r.get("attack_family", "unknown")
+        argo        = r.get("argo_workflow", "—")
+        dets        = r.get("detectors", {})
+        eval_f1     = r.get("eval_f1")
+        eval_acc    = r.get("eval_accuracy")
+        eval_loss   = r.get("eval_loss")
+        train_size  = r.get("train_size")
+        out_model   = r.get("output_model", "")
+
+        # Eval metrics row (retrain_kernel format)
+        eval_row = ""
+        if eval_f1 is not None:
+            f1_color  = "#10b981" if eval_f1 >= 0.7 else "#f97316" if eval_f1 >= 0.5 else "#ef4444"
+            acc_color = "#10b981" if (eval_acc or 0) >= 0.75 else "#f97316"
+            eval_row = f"""
+<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;padding:10px 14px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
+  <div style="text-align:center;min-width:60px">
+    <div style="font-size:.68em;color:#64748b;font-weight:700;text-transform:uppercase">F1</div>
+    <div style="font-size:1.2em;font-weight:800;color:{f1_color}">{eval_f1:.3f}</div>
+  </div>
+  {"<div style='text-align:center;min-width:60px'><div style='font-size:.68em;color:#64748b;font-weight:700;text-transform:uppercase'>Accuracy</div><div style='font-size:1.2em;font-weight:800;color:" + acc_color + "'>" + f"{eval_acc:.1%}" + "</div></div>" if eval_acc is not None else ""}
+  {"<div style='text-align:center;min-width:60px'><div style='font-size:.68em;color:#64748b;font-weight:700;text-transform:uppercase'>Loss</div><div style='font-size:1.2em;font-weight:800;color:#64748b'>" + f"{eval_loss:.4f}" + "</div></div>" if eval_loss is not None else ""}
+  {"<div style='text-align:center;min-width:60px'><div style='font-size:.68em;color:#64748b;font-weight:700;text-transform:uppercase'>Train samples</div><div style='font-size:1.2em;font-weight:800;color:#4f46e5'>" + str(train_size) + "</div></div>" if train_size is not None else ""}
+  {"<div style='margin-left:auto;font-size:.72em;color:#94a3b8;font-family:monospace;align-self:center'>" + out_model.split('/')[-1] + "</div>" if out_model else ""}
+</div>"""
 
         det_pills = ""
         for det, info in dets.items():
@@ -689,6 +711,7 @@ def render_model_progress():
       </span>
     </div>
   </div>
+  {eval_row}
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">
     {det_pills if det_pills else '<span style="color:#94a3b8;font-size:.85em">No detector data</span>'}
   </div>

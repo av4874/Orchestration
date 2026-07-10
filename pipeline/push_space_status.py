@@ -98,12 +98,25 @@ LINEAGE_FILE = "model_lineage.json"
 
 
 def build_lineage_entry(round_num: int) -> dict | None:
-    """Build one round's lineage entry from local result files. Returns None if no retrain happened."""
+    """Build one round's lineage entry from local result files. Returns None if no retrain happened.
+
+    Handles two retrain report formats:
+    - retrain_kernel.ipynb format: hub_pushed + output_model + eval_f1/accuracy (single combined model)
+    - legacy retrain.py format: detectors_retrained + post_evasion (per-detector models)
+    """
     retrain_path = RESULTS_DIR / "retrain_report.json"
     if not retrain_path.exists():
         return None
     retrain = json.loads(retrain_path.read_text(encoding="utf-8"))
-    if retrain.get("action") in ("skip", "fast_promote") or not retrain.get("detectors_retrained"):
+
+    # retrain_kernel.ipynb format: hub_pushed + output_model
+    is_kernel_format = retrain.get("hub_pushed") and retrain.get("output_model")
+    # legacy format: detectors_retrained list
+    is_legacy_format = bool(retrain.get("detectors_retrained"))
+
+    if not is_kernel_format and not is_legacy_format:
+        return None
+    if retrain.get("action") in ("skip", "fast_promote"):
         return None
 
     evasion_path = RESULTS_DIR / "evasion_report.json"
@@ -121,7 +134,42 @@ def build_lineage_entry(round_num: int) -> dict | None:
         d = json.loads(decision_path.read_text(encoding="utf-8"))
         argo_workflow = d.get("argo_workflow", "unknown")
 
-    version = round_num + 3  # matches retrain.py VERSION_OFFSET
+    if is_kernel_format:
+        # retrain_kernel trains one combined model covering all affected detectors.
+        # Map each detector with pre_evasion from evasion_report; post_evasion from report.
+        output_model = retrain["output_model"]
+        post_evasion_all = retrain.get("evasion_rate_after")
+        eval_f1 = retrain.get("eval_f1")
+        eval_accuracy = retrain.get("eval_accuracy")
+        eval_loss = retrain.get("eval_loss")
+        train_size = retrain.get("train_size")
+
+        # Detectors targeted = those with high pre-evasion (were retrain priority)
+        targeted = [det for det, v in pre_evasion.items() if v and v >= 0.25] or list(pre_evasion.keys())
+        detectors_built = {}
+        for det in targeted:
+            detectors_built[det] = {
+                "pre_evasion": pre_evasion.get(det),
+                "post_evasion": post_evasion_all,
+                "hf_model": output_model,
+            }
+
+        return {
+            "round": round_num,
+            "hf_version": round_num,
+            "attack_family": attack_family,
+            "argo_workflow": argo_workflow,
+            "detectors": detectors_built,
+            "eval_f1": eval_f1,
+            "eval_accuracy": eval_accuracy,
+            "eval_loss": eval_loss,
+            "train_size": train_size,
+            "output_model": output_model,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    # Legacy per-detector format
+    version = round_num + 3
     detectors_built = {}
     for det in retrain.get("detectors_retrained", []):
         base_id = {
