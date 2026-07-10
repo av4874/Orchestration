@@ -100,21 +100,25 @@ LINEAGE_FILE = "model_lineage.json"
 def build_lineage_entry(round_num: int) -> dict | None:
     """Build one round's lineage entry from local result files. Returns None if no retrain happened.
 
-    Handles two retrain report formats:
-    - retrain_kernel.ipynb format: hub_pushed + output_model + eval_f1/accuracy (single combined model)
-    - legacy retrain.py format: detectors_retrained + post_evasion (per-detector models)
+    Handles three retrain report formats:
+    - new per-detector format: per_detector dict with per-detector results (retrain_kernel v2)
+    - old kernel format: hub_pushed + output_model + eval_f1 (single combined model)
+    - legacy format: detectors_retrained list + post_evasion
     """
     retrain_path = RESULTS_DIR / "retrain_report.json"
     if not retrain_path.exists():
         return None
     retrain = json.loads(retrain_path.read_text(encoding="utf-8"))
 
-    # retrain_kernel.ipynb format: hub_pushed + output_model
-    is_kernel_format = retrain.get("hub_pushed") and retrain.get("output_model")
-    # legacy format: detectors_retrained list
-    is_legacy_format = bool(retrain.get("detectors_retrained"))
+    # Detect format
+    is_per_detector_format = bool(retrain.get("per_detector"))
+    is_kernel_format = not is_per_detector_format and retrain.get("hub_pushed") and retrain.get("output_model")
+    is_legacy_format = not is_per_detector_format and not is_kernel_format and bool(retrain.get("detectors_retrained"))
 
-    if not is_kernel_format and not is_legacy_format:
+    # No retrain happened
+    if not is_per_detector_format and not is_kernel_format and not is_legacy_format:
+        return None
+    if retrain.get("status") in ("no_retrain_needed",):
         return None
     if retrain.get("action") in ("skip", "fast_promote"):
         return None
@@ -134,56 +138,78 @@ def build_lineage_entry(round_num: int) -> dict | None:
         d = json.loads(decision_path.read_text(encoding="utf-8"))
         argo_workflow = d.get("argo_workflow", "unknown")
 
-    if is_kernel_format:
-        # retrain_kernel trains one combined model covering all affected detectors.
-        # Map each detector with pre_evasion from evasion_report; post_evasion from report.
-        output_model = retrain["output_model"]
-        post_evasion_all = retrain.get("evasion_rate_after")
-        eval_f1 = retrain.get("eval_f1")
-        eval_accuracy = retrain.get("eval_accuracy")
-        eval_loss = retrain.get("eval_loss")
-        train_size = retrain.get("train_size")
-
-        # Detectors targeted = those with high pre-evasion (were retrain priority)
-        targeted = [det for det, v in pre_evasion.items() if v and v >= 0.25] or list(pre_evasion.keys())
+    if is_per_detector_format:
+        # New format: per_detector dict — each detector trained and pushed independently
+        per_det = retrain["per_detector"]
         detectors_built = {}
-        for det in targeted:
+        for det, dr in per_det.items():
             detectors_built[det] = {
-                "pre_evasion": pre_evasion.get(det),
-                "post_evasion": post_evasion_all,
-                "hf_model": output_model,
+                "pre_evasion": dr.get("evasion_rate_before", pre_evasion.get(det)),
+                "post_evasion": dr.get("evasion_rate_after"),
+                "hf_model": dr.get("output_model"),
             }
-
+        # Aggregate eval metrics across retrained detectors
+        f1_vals = [r["eval_f1"] for r in per_det.values() if r.get("eval_f1") is not None]
+        acc_vals = [r["eval_accuracy"] for r in per_det.values() if r.get("eval_accuracy") is not None]
+        loss_vals = [r["eval_loss"] for r in per_det.values() if r.get("eval_loss") is not None]
+        size_vals = [r["train_size"] for r in per_det.values() if r.get("train_size") is not None]
         return {
             "round": round_num,
             "hf_version": round_num,
             "attack_family": attack_family,
             "argo_workflow": argo_workflow,
             "detectors": detectors_built,
-            "eval_f1": eval_f1,
-            "eval_accuracy": eval_accuracy,
-            "eval_loss": eval_loss,
-            "train_size": train_size,
+            "eval_f1": round(sum(f1_vals) / len(f1_vals), 4) if f1_vals else None,
+            "eval_accuracy": round(sum(acc_vals) / len(acc_vals), 4) if acc_vals else None,
+            "eval_loss": round(sum(loss_vals) / len(loss_vals), 4) if loss_vals else None,
+            "train_size": sum(size_vals) if size_vals else None,
+            "output_model": list(per_det.values())[0].get("output_model") if per_det else None,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    if is_kernel_format:
+        # Old single-model kernel format
+        output_model = retrain["output_model"]
+        post_evasion_all = retrain.get("evasion_rate_after")
+        targeted = [det for det, v in pre_evasion.items() if v and v >= 0.25] or list(pre_evasion.keys())
+        detectors_built = {
+            det: {
+                "pre_evasion": pre_evasion.get(det),
+                "post_evasion": post_evasion_all,
+                "hf_model": output_model,
+            }
+            for det in targeted
+        }
+        return {
+            "round": round_num,
+            "hf_version": round_num,
+            "attack_family": attack_family,
+            "argo_workflow": argo_workflow,
+            "detectors": detectors_built,
+            "eval_f1": retrain.get("eval_f1"),
+            "eval_accuracy": retrain.get("eval_accuracy"),
+            "eval_loss": retrain.get("eval_loss"),
+            "train_size": retrain.get("train_size"),
             "output_model": output_model,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
     # Legacy per-detector format
     version = round_num + 3
-    detectors_built = {}
-    for det in retrain.get("detectors_retrained", []):
-        base_id = {
-            "injection":          "Builder117/distilbert-prompt-injection",
-            "jailbreak":          "Builder117/distilbert-jailbreak",
-            "insecure_output":    "Builder117/distilbert-insecure-output",
-            "indirect_injection": "Builder117/distilbert-indirect-injection",
-        }.get(det, det)
-        detectors_built[det] = {
+    base_ids = {
+        "injection":          "Builder117/distilbert-prompt-injection",
+        "jailbreak":          "Builder117/distilbert-jailbreak",
+        "insecure_output":    "Builder117/distilbert-insecure-output",
+        "indirect_injection": "Builder117/distilbert-indirect-injection",
+    }
+    detectors_built = {
+        det: {
             "pre_evasion": pre_evasion.get(det),
             "post_evasion": retrain.get("post_evasion", {}).get(det),
-            "hf_model": f"{base_id}-v{version}",
+            "hf_model": f"{base_ids.get(det, det)}-v{version}",
         }
-
+        for det in retrain.get("detectors_retrained", [])
+    }
     return {
         "round": round_num,
         "hf_version": version,
