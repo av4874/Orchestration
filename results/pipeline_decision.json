@@ -1,0 +1,15 @@
+{
+  "round": 2,
+  "action": "retrain",
+  "models_to_retrain": [
+    "jailbreak"
+  ],
+  "severity": "high",
+  "confidence": 0.85,
+  "argo_workflow": "full-canary",
+  "reason": "Evasion score for jailbreak detector exceeds threshold (0.40), indicating potential weaknesses in detection capabilities. Retraining is recommended to improve robustness.",
+  "next_attack_families": [
+    "roleplay_framing"
+  ],
+  "timestamp": "2026-07-10T19:33:49.740505+00:00"
+}

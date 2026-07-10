@@ -1,0 +1,18 @@
+{
+  "round": 2,
+  "timestamp": "2026-07-10T19:36:49.982570+00:00",
+  "base_model": "distilbert-base-uncased",
+  "output_model": "Builder117/enterprise-detector-v2",
+  "hub_pushed": true,
+  "num_attack_samples": 11,
+  "num_benign_samples": 20,
+  "train_size": 24,
+  "eval_size": 7,
+  "training_loss": 1.4671,
+  "eval_accuracy": 0.2857,
+  "eval_f1": 0.127,
+  "eval_loss": 1.4812,
+  "evasion_rate_after": 0.0,
+  "avg_attack_confidence": 0.5488,
+  "status": "success"
+}

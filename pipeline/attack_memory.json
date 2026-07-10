@@ -1,5 +1,14 @@
 {
-  "rounds": [],
+  "rounds": [
+    {
+      "round": 2,
+      "timestamp": "2026-07-10T19:38:11.219489+00:00",
+      "families_tried": [],
+      "top_family": "unknown",
+      "evasion_rate": 1.0,
+      "action": "retrain"
+    }
+  ],
   "current_focus": [],
   "known_blind_spots": []
 }
