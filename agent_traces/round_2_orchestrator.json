@@ -3,8 +3,8 @@
   "mode": "live_qwen3",
   "agent": "orchestrator",
   "model": "Qwen/Qwen3-8B-INT4",
-  "total_tokens": 542,
+  "total_tokens": 574,
   "steps": 5,
-  "final_output": "The pipeline decision has been successfully written with the following parameters:\n\n- **Action**: retrain\n- **Severity**: high\n- **Argo Workflow**: full-canary\n- **Confidence**: 0.85\n\nThe next step is to ensure the retraining process is initiated for the \"jailbreak\" detector, focusing on the \"roleplay_framing\" attack family. The memory has been updated with the details of this round, and the system is now prepared for the next phase of the pipeline.",
-  "timestamp": "2026-07-10T19:34:18.470291+00:00"
+  "final_output": "The orchestration for round 2 has been completed. Here's a summary of the decisions made:\n\n- **Action**: emergency_rollback\n- **Severity**: critical\n- **Argo Workflow**: full-canary\n- **Confidence**: 0.99\n- **Reason**: Evasion rate of 1.0 for `html_comment_smuggling` indicates a complete bypass of the `indirect_injection` detector. Immediate rollback and retraining are required to prevent further vulnerabilities.\n\nThe next step will focus on the `html_comment_smuggling` family to address the ide",
+  "timestamp": "2026-07-10T20:13:44.147145+00:00"
 }

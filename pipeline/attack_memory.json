@@ -2,11 +2,11 @@
   "rounds": [
     {
       "round": 2,
-      "timestamp": "2026-07-10T19:38:11.219489+00:00",
+      "timestamp": "2026-07-10T20:14:18.516076+00:00",
       "families_tried": [],
       "top_family": "unknown",
       "evasion_rate": 1.0,
-      "action": "retrain"
+      "action": "emergency_rollback"
     }
   ],
   "current_focus": [],
