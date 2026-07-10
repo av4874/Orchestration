@@ -3,9 +3,9 @@
   "action": "skip",
   "models_to_retrain": [],
   "confidence": 0.95,
-  "reason": "All detectors show evasion scores below 0.25. No retraining required.",
+  "reason": "Evasion scores are below 0.25 for all detectors, indicating no critical weaknesses detected. No retraining is needed for this round.",
   "next_attack_families": [
     "unknown"
   ],
-  "timestamp": "2026-07-10T21:05:28.275827+00:00"
+  "timestamp": "2026-07-10T21:24:24.403194+00:00"
 }
