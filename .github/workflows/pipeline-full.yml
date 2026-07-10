@@ -41,8 +41,11 @@ jobs:
             ROUND="${{ github.event.inputs.round }}"
           else
             ROUND=$(python -c "
-          import json, os
-          # Prefer HF Hub copy (always up-to-date) over stale git-committed version
+          import json, os, sys
+          def next_round(m):
+              rounds = m.get('rounds', [])
+              # Use max round number, not len — robust against duplicate/missing entries
+              return max((r.get('round', 0) for r in rounds), default=0) + 1
           try:
               from huggingface_hub import hf_hub_download
               p = hf_hub_download(
@@ -50,14 +53,19 @@ jobs:
                   filename='pipeline/attack_memory.json',
                   repo_type='dataset',
                   token=os.environ.get('HF_TOKEN'),
+                  force_download=True,
               )
               m = json.load(open(p))
-              print(len(m.get('rounds', [])) + 1)
+              r = next_round(m)
+              print(f'HF Hub: max_round={max((x.get(\"round\",0) for x in m.get(\"rounds\",[])),default=0)} -> next={r}', file=sys.stderr)
+              print(r)
           except Exception as e:
-              import sys; print(f'HF Hub fallback: {e}', file=sys.stderr)
+              print(f'HF Hub fallback: {e}', file=sys.stderr)
               mem_path = 'pipeline/attack_memory.json'
               m = json.load(open(mem_path)) if os.path.exists(mem_path) else {'rounds': []}
-              print(len(m.get('rounds', [])) + 1)
+              r = next_round(m)
+              print(f'git fallback: max_round={max((x.get(\"round\",0) for x in m.get(\"rounds\",[])),default=0)} -> next={r}', file=sys.stderr)
+              print(r)
           ")
           fi
           echo "round=$ROUND" >> $GITHUB_OUTPUT
@@ -234,7 +242,7 @@ jobs:
           ROUND="${{ needs.phase1-generate.outputs.round }}"
           ACTION=$(python -c "import json,os; p='results/pipeline_decision.json'; print(json.load(open(p))['action'] if os.path.exists(p) else 'skip')" 2>/dev/null || echo "skip")
           echo "Orchestrator action: $ACTION"
-          if [ "$ACTION" = "retrain" ] || [ "$ACTION" = "partial_retrain" ]; then
+          if [ "$ACTION" = "retrain" ] || [ "$ACTION" = "partial_retrain" ] || [ "$ACTION" = "emergency_rollback" ]; then
             echo "Action=$ACTION — running DistilBERT fine-tune on Kaggle T4..."
             python pipeline/trigger_agents.py --agent retrain --round $ROUND
           else
