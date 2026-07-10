@@ -1,15 +1,11 @@
 {
-  "round": 2,
-  "action": "emergency_rollback",
-  "models_to_retrain": [
-    "indirect_injection"
-  ],
-  "severity": "critical",
-  "confidence": 0.99,
-  "argo_workflow": "full-canary",
-  "reason": "Evasion rate of 1.0 for html_comment_smuggling indicates complete bypass of the indirect_injection detector. Immediate rollback and retraining are required to prevent further vulnerabilities.",
+  "round": 3,
+  "action": "skip",
+  "models_to_retrain": [],
+  "confidence": 0.95,
+  "reason": "All detectors show evasion scores below 0.25. No retraining required.",
   "next_attack_families": [
-    "html_comment_smuggling"
+    "unknown"
   ],
-  "timestamp": "2026-07-10T20:13:09.114530+00:00"
+  "timestamp": "2026-07-10T21:05:28.275827+00:00"
 }

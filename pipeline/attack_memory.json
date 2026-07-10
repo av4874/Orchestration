@@ -7,6 +7,14 @@
       "top_family": "unknown",
       "evasion_rate": 1.0,
       "action": "emergency_rollback"
+    },
+    {
+      "round": 3,
+      "timestamp": "2026-07-10T21:06:30.409641+00:00",
+      "families_tried": [],
+      "top_family": "unknown",
+      "evasion_rate": 1.0,
+      "action": "skip"
     }
   ],
   "current_focus": [],

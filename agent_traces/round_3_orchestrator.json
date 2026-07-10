@@ -1,0 +1,10 @@
+{
+  "round": 3,
+  "mode": "live_qwen3",
+  "agent": "orchestrator",
+  "model": "Qwen/Qwen3-8B-INT4",
+  "total_tokens": 499,
+  "steps": 7,
+  "final_output": "Pipeline orchestration for round 3 is complete. The decision is to **skip** retraining, as all detectors show evasion scores below the 0.25 threshold. The next attack family will focus on **unknown**. The round summary has been saved to `attack_memory.json`.",
+  "timestamp": "2026-07-10T21:05:51.452377+00:00"
+}
