@@ -271,11 +271,14 @@ jobs:
           print(f'LLM decision: {llm_action} | Evasion-based: {correct_action}')
           print(f'Rates: {rates}')
 
-          if llm_action != correct_action:
-              print(f'OVERRIDE: {llm_action} -> {correct_action} (models: {correct_models})')
+          # Always correct models_to_retrain from evasion data — LLM often picks wrong detectors
+          llm_models = sorted(d.get('models_to_retrain', []))
+          needs_override = (llm_action != correct_action) or (correct_action != 'skip' and llm_models != sorted(correct_models))
+          if needs_override:
+              print(f'OVERRIDE: action {llm_action}->{correct_action}, models {llm_models}->{correct_models}')
               d['action'] = correct_action
               d['models_to_retrain'] = correct_models
-              d['reason'] = d.get('reason', '') + f' [GHA override: evasion data required {correct_action}; LLM incorrectly said {llm_action}]'
+              d['reason'] = d.get('reason', '') + f' [GHA override: evasion data required {correct_action} {correct_models}; LLM said {llm_action} {llm_models}]'
               decision_path.write_text(json.dumps(d, indent=2))
               upload_file(
                   path_or_fileobj='results/pipeline_decision.json',
