@@ -1,18 +1,40 @@
 {
-  "round": 2,
-  "timestamp": "2026-07-10T19:36:49.982570+00:00",
-  "base_model": "distilbert-base-uncased",
-  "output_model": "Builder117/enterprise-detector-v2",
+  "round": 5,
+  "timestamp": "2026-07-11T08:16:55.415896+00:00",
+  "detectors_retrained": [
+    "jailbreak",
+    "insecure_output"
+  ],
+  "per_detector": {
+    "jailbreak": {
+      "hub_pushed": true,
+      "output_model": "Builder117/distilbert-jailbreak",
+      "train_size": 24,
+      "eval_f1": 0.8148,
+      "eval_accuracy": 0.8333,
+      "eval_loss": 0.8905,
+      "training_loss": 1.2668,
+      "evasion_rate_before": 0.8,
+      "evasion_rate_after": 0.6
+    },
+    "insecure_output": {
+      "hub_pushed": true,
+      "output_model": "Builder117/distilbert-insecure-output",
+      "train_size": 24,
+      "eval_f1": 0.5333,
+      "eval_accuracy": 0.6667,
+      "eval_loss": 1.6151,
+      "training_loss": 1.6458,
+      "evasion_rate_before": 1.0,
+      "evasion_rate_after": 1.0
+    }
+  },
   "hub_pushed": true,
-  "num_attack_samples": 11,
-  "num_benign_samples": 20,
+  "output_model": "Builder117/distilbert-jailbreak",
+  "eval_f1": 0.8148,
+  "eval_accuracy": 0.8333,
+  "eval_loss": 0.8905,
   "train_size": 24,
-  "eval_size": 7,
-  "training_loss": 1.4671,
-  "eval_accuracy": 0.2857,
-  "eval_f1": 0.127,
-  "eval_loss": 1.4812,
-  "evasion_rate_after": 0.0,
-  "avg_attack_confidence": 0.5488,
+  "evasion_rate_after": 0.6,
   "status": "success"
 }

@@ -1,0 +1,10 @@
+{
+  "round": 5,
+  "mode": "live_qwen3",
+  "agent": "orchestrator",
+  "model": "Qwen/Qwen3-8B-INT4",
+  "total_tokens": 536,
+  "steps": 7,
+  "final_output": "Round 5 orchestration completed:\n- Action: skip\n- Confidence: 0.95\n- No models to retrain\n- Reason: All detectors have evasion scores below 0.25. No retraining is needed for this round.\n- Next attack families: [\"unknown\"]",
+  "timestamp": "2026-07-11T08:14:27.986840+00:00"
+}

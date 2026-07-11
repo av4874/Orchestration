@@ -1,11 +1,14 @@
 {
-  "round": 4,
-  "action": "skip",
-  "models_to_retrain": [],
+  "round": 5,
+  "action": "retrain",
+  "models_to_retrain": [
+    "jailbreak",
+    "insecure_output"
+  ],
   "confidence": 0.95,
-  "reason": "All detectors have evasion scores below 0.25. No retraining is needed for this round.",
+  "reason": "All detectors have evasion scores below 0.25. No retraining is needed for this round. [GHA override: evasion data required retrain; LLM incorrectly said skip]",
   "next_attack_families": [
     "unknown"
   ],
-  "timestamp": "2026-07-11T07:46:42.530322+00:00"
+  "timestamp": "2026-07-11T08:14:01.271866+00:00"
 }
