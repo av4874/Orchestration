@@ -1,0 +1,120 @@
+name: Auto Loop — N Rounds
+
+on:
+  workflow_dispatch:
+    inputs:
+      num_rounds:
+        description: 'Number of rounds to run sequentially'
+        required: false
+        default: '5'
+      start_round:
+        description: 'Override starting round (blank = auto-detect from attack_memory)'
+        required: false
+        default: ''
+
+jobs:
+  auto-loop:
+    name: "Auto Loop — ${{ github.event.inputs.num_rounds || '5' }} rounds"
+    runs-on: ubuntu-latest
+    timeout-minutes: 300   # 5 rounds × ~30min each + buffer
+    permissions:
+      actions: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - run: pip install huggingface_hub --quiet
+
+      - name: Run rounds sequentially
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          NUM_ROUNDS="${{ github.event.inputs.num_rounds }}"
+          NUM_ROUNDS="${NUM_ROUNDS:-5}"
+
+          # Auto-detect starting round from HF Hub attack_memory
+          if [ -n "${{ github.event.inputs.start_round }}" ]; then
+            START="${{ github.event.inputs.start_round }}"
+          else
+            START=$(python -c "
+          import json, os, sys
+          try:
+              from huggingface_hub import hf_hub_download
+              p = hf_hub_download('Builder117/enterprise-adversarial-samples',
+                  'pipeline/attack_memory.json', repo_type='dataset',
+                  token=os.environ.get('HF_TOKEN'), force_download=True)
+              m = json.load(open(p))
+              rounds = m.get('rounds', [])
+              nxt = max((r.get('round', 0) for r in rounds), default=0) + 1
+              print(nxt)
+          except Exception as e:
+              print(f'round detection failed: {e}', file=sys.stderr)
+              sys.exit(1)
+          ")
+          fi
+
+          echo "Starting round: $START | Rounds to run: $NUM_ROUNDS"
+          FAILURES=0
+
+          for i in $(seq 0 $((NUM_ROUNDS - 1))); do
+            ROUND=$((START + i))
+            echo ""
+            echo "════════════════════════════════════════"
+            echo "  ROUND $ROUND  ($((i+1))/$NUM_ROUNDS)"
+            echo "════════════════════════════════════════"
+
+            BEFORE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+            gh workflow run pipeline-full.yml \
+              --repo "$REPO" \
+              --field round=$ROUND
+
+            # Wait for the run to register
+            sleep 20
+
+            # Find run triggered after BEFORE
+            RUN_ID=""
+            for attempt in 1 2 3 4 5; do
+              RUN_ID=$(gh run list \
+                --workflow=pipeline-full.yml \
+                --repo "$REPO" \
+                --limit=5 \
+                --json databaseId,createdAt \
+                --jq "[.[] | select(.createdAt >= \"$BEFORE\")] | .[0].databaseId // empty")
+              [ -n "$RUN_ID" ] && break
+              echo "  Waiting for run to appear (attempt $attempt)..."
+              sleep 15
+            done
+
+            if [ -z "$RUN_ID" ]; then
+              echo "ERROR: could not find run ID for round $ROUND — aborting loop"
+              exit 1
+            fi
+
+            echo "  Watching run $RUN_ID..."
+            if gh run watch "$RUN_ID" --repo "$REPO" --exit-status; then
+              echo "  Round $ROUND: SUCCESS"
+            else
+              echo "  Round $ROUND: FAILED (continuing to next round)"
+              FAILURES=$((FAILURES + 1))
+            fi
+
+            # Brief pause between rounds
+            if [ $i -lt $((NUM_ROUNDS - 1)) ]; then
+              echo "  Sleeping 20s before next round..."
+              sleep 20
+            fi
+          done
+
+          echo ""
+          echo "════════════════════════════════════════"
+          echo "Loop complete: $NUM_ROUNDS rounds, $FAILURES failures"
+          echo "════════════════════════════════════════"
+          [ $FAILURES -eq 0 ] || exit 1
