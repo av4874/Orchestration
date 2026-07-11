@@ -3,8 +3,8 @@
   "mode": "live_qwen3",
   "agent": "orchestrator",
   "model": "Qwen/Qwen3-8B-INT4",
-  "total_tokens": 566,
+  "total_tokens": 538,
   "steps": 7,
-  "final_output": "The orchestration for round 3 has been completed. The decision was made to **skip** retraining, as all detectors showed evasion scores below the threshold of 0.25. The next attack family will focus on **unknown**. The round summary has been saved to `attack_memory.json`. Let me know if you need further actions!",
-  "timestamp": "2026-07-10T21:24:52.258484+00:00"
+  "final_output": "The orchestration for round 3 has been completed. The decision was to **skip** retraining, as all evasion scores were below the threshold of 0.25. The next attack family to focus on is **unknown**. The round summary has been saved in `attack_memory.json`.",
+  "timestamp": "2026-07-11T06:54:57.239678+00:00"
 }
