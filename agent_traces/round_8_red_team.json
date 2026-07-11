@@ -1,0 +1,10 @@
+{
+  "round": 8,
+  "mode": "live_qwen3",
+  "agent": "red_team",
+  "model": "Qwen/Qwen3-8B-INT4",
+  "total_tokens": 611,
+  "steps": 9,
+  "final_output": "The final report has been successfully sent to the orchestrator with the valid samples and the top family identified as \"unknown\". The attack cycle for round 8 is complete.",
+  "timestamp": "2026-07-11T09:53:34.983880+00:00"
+}
