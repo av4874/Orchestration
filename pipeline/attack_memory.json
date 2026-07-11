@@ -15,6 +15,14 @@
       "top_family": "unknown",
       "evasion_rate": 1.0,
       "action": "skip"
+    },
+    {
+      "round": 4,
+      "timestamp": "2026-07-11T07:48:02.905311+00:00",
+      "families_tried": [],
+      "top_family": "unknown",
+      "evasion_rate": 0.8,
+      "action": "skip"
     }
   ],
   "current_focus": [],

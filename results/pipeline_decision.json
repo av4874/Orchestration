@@ -1,11 +1,11 @@
 {
-  "round": 3,
+  "round": 4,
   "action": "skip",
   "models_to_retrain": [],
   "confidence": 0.95,
-  "reason": "Evasion scores are below 0.25 for all detectors. No retraining needed.",
+  "reason": "All detectors have evasion scores below 0.25. No retraining is needed for this round.",
   "next_attack_families": [
     "unknown"
   ],
-  "timestamp": "2026-07-11T06:54:33.315504+00:00"
+  "timestamp": "2026-07-11T07:46:42.530322+00:00"
 }
