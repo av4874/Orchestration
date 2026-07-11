@@ -1,0 +1,10 @@
+{
+  "round": 9,
+  "mode": "live_qwen3",
+  "agent": "orchestrator",
+  "model": "Qwen/Qwen3-8B-INT4",
+  "total_tokens": 543,
+  "steps": 7,
+  "final_output": "The orchestration for round 9 has been completed. The decision was made to **skip** retraining, as all detectors have evasion scores below 0.25. The next attack family will focus on \"unknown.\" The round summary has been saved to `attack_memory.json`.",
+  "timestamp": "2026-07-11T11:59:12.593440+00:00"
+}
