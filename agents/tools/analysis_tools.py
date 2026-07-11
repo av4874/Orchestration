@@ -146,7 +146,7 @@ def analyze_weakness(analysis_input: str) -> str:
             for w in weaknesses]
 
     return json.dumps({
-        "round": report.get("round") if report_path.exists() else None,
+        "round": report.get("round"),
         "weaknesses": slim,
         "retrain_priority": retrain_priority,
         "recommendation": f"Retrain {retrain_priority} — {sum(1 for w in weaknesses if w['severity']=='CRITICAL')} critical gaps.",
