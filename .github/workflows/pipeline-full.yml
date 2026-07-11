@@ -230,6 +230,65 @@ jobs:
           [ -f results/pipeline_decision.json ] && cat results/pipeline_decision.json || echo "WARNING: pipeline_decision.json not found — orchestrator may not have called decide_routing"
         continue-on-error: true
 
+      - name: Validate and override orchestrator decision (evasion-based safety net)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python -c "
+          import json, os, sys
+          from pathlib import Path
+          from datetime import datetime, timezone
+          from huggingface_hub import upload_file
+
+          evasion_path = Path('results/evasion_report.json')
+          decision_path = Path('results/pipeline_decision.json')
+
+          if not evasion_path.exists():
+              print('No evasion_report.json — skipping override check')
+              sys.exit(0)
+
+          er = json.loads(evasion_path.read_text())
+          per_det = er.get('per_detector', {})
+          rates = {d: v.get('evasion_rate', 0.0) for d, v in per_det.items()}
+
+          d = json.loads(decision_path.read_text()) if decision_path.exists() else {}
+          llm_action = d.get('action', 'skip')
+
+          # Deterministic decision from evasion data
+          critical = [det for det, r in rates.items() if r >= 0.40]
+          high     = [det for det, r in rates.items() if 0.25 <= r < 0.40]
+
+          if critical:
+              correct_action = 'retrain'
+              correct_models = critical + [det for det in high if det not in critical]
+          elif high:
+              correct_action = 'partial_retrain'
+              correct_models = high
+          else:
+              correct_action = 'skip'
+              correct_models = []
+
+          print(f'LLM decision: {llm_action} | Evasion-based: {correct_action}')
+          print(f'Rates: {rates}')
+
+          if llm_action != correct_action:
+              print(f'OVERRIDE: {llm_action} -> {correct_action} (models: {correct_models})')
+              d['action'] = correct_action
+              d['models_to_retrain'] = correct_models
+              d['reason'] = d.get('reason', '') + f' [GHA override: evasion data required {correct_action}; LLM incorrectly said {llm_action}]'
+              decision_path.write_text(json.dumps(d, indent=2))
+              upload_file(
+                  path_or_fileobj='results/pipeline_decision.json',
+                  path_in_repo='results/pipeline_decision.json',
+                  repo_id='Builder117/enterprise-adversarial-samples',
+                  repo_type='dataset',
+                  token=os.environ['HF_TOKEN'],
+              )
+              print('Uploaded corrected pipeline_decision.json to HF Hub')
+          else:
+              print('LLM decision matches evasion data — no override needed')
+          "
+
       - name: Fine-tune detector on Kaggle T4 (if full-canary)
         env:
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
