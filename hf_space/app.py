@@ -1091,38 +1091,88 @@ def render_blue_analysis():
 def render_orchestrator():
     s = load_status()
     lineage = load_lineage()
+    orch = s.get("orchestrator", {})
+    action = orch.get("action", "none")
+    confidence = orch.get("confidence")
+    reason = orch.get("reason", "—")
+    models_to_retrain = orch.get("models_to_retrain", [])
+
+    action_meta = {
+        "retrain":         ("#ef4444", "#450a0a", "RETRAIN",         "All evading detectors will be fine-tuned"),
+        "partial_retrain": ("#f97316", "#431407", "PARTIAL RETRAIN", "Selected detectors will be fine-tuned"),
+        "skip":            ("#22c55e", "#052e16", "SKIP",            "Evasion below threshold — no retraining needed"),
+        "none":            ("#64748b", "#1e293b", "PENDING",         "Awaiting orchestrator decision"),
+    }
+    a_color, a_bg, a_label, a_desc = action_meta.get(action, action_meta["none"])
+
+    conf_pct = f"{confidence:.0%}" if confidence else "—"
+    conf_bar_w = f"{int(confidence * 100)}%" if confidence else "0%"
+
+    retrain_chips = "".join(
+        f'<span style="background:#1e3a5f;color:#7dd3fc;font-size:.75em;font-weight:600;'
+        f'padding:3px 10px;border-radius:12px;border:1px solid #1d4ed8">{d}</span> '
+        for d in models_to_retrain
+    ) if models_to_retrain else '<span style="color:#475569;font-size:.82em">none</span>'
+
+    # History rows from attack_memory rounds (richer than lineage)
+    mem = s.get("_attack_memory_rounds", lineage.get("rounds", []))
+    hist_rows = ""
+    for r in reversed(lineage.get("rounds", [])):
+        r_action = r.get("action", "?")
+        r_color = {"retrain": "#ef4444", "partial_retrain": "#f97316", "skip": "#22c55e"}.get(r_action, "#64748b")
+        r_eval_f1 = r.get("eval_f1")
+        f1_str = f'F1 {r_eval_f1:.2f}' if r_eval_f1 else ""
+        dets = r.get("detectors", {})
+        det_str = ", ".join(dets.keys()) if dets else r.get("attack_family", "—")
+        hist_rows += (
+            f'<div style="display:grid;grid-template-columns:40px 110px 1fr auto auto;'
+            f'align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #0f172a;font-size:.78em">'
+            f'<span style="color:#64748b;font-weight:700">R{r["round"]}</span>'
+            f'<span style="color:{r_color};font-weight:700">{r_action.upper().replace("_"," ")}</span>'
+            f'<span style="color:#94a3b8">{det_str}</span>'
+            f'<span style="color:#38bdf8">{f1_str}</span>'
+            f'<span style="color:#475569">{r.get("timestamp","")[:10]}</span>'
+            f'</div>'
+        )
+
     return f"""
 <div style="background:#0f172a;border:1px solid #334155;border-radius:10px;padding:18px 22px;font-family:'Inter',sans-serif">
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px">
-    {"".join(
-        f'<div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:12px 16px">'
-        f'<div style="font-size:.72em;color:#64748b;text-transform:uppercase;font-weight:700;letter-spacing:.5px">{lbl}</div>'
-        f'<div style="font-size:1.1em;font-weight:700;color:{col};margin-top:2px">{val}</div>'
-        f'</div>'
-        for lbl, col, val in [
-            ("Action",     "#a5b4fc", s["orchestrator"]["action"].upper()),
-            ("Confidence", "#e2e8f0", f'{s["orchestrator"]["confidence"]:.0%}' if s["orchestrator"]["confidence"] else "—"),
-        ]
-    )}
-  </div>
-  <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:14px 18px;margin-bottom:14px">
-    <div style="font-size:.75em;color:#64748b;text-transform:uppercase;font-weight:700;margin-bottom:6px">Reasoning</div>
-    <div style="color:#cbd5e1;font-size:.92em;line-height:1.7">{s["orchestrator"]["reason"]}</div>
+
+  <!-- Action Banner -->
+  <div style="background:{a_bg};border:1px solid {a_color}40;border-radius:10px;padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;gap:16px">
+    <div style="width:10px;height:10px;border-radius:50%;background:{a_color};flex-shrink:0;box-shadow:0 0 8px {a_color}"></div>
+    <div>
+      <div style="font-size:1.25em;font-weight:800;color:{a_color};letter-spacing:.5px">{a_label}</div>
+      <div style="font-size:.82em;color:#94a3b8;margin-top:2px">{a_desc}</div>
+    </div>
+    <div style="margin-left:auto;text-align:right">
+      <div style="font-size:.72em;color:#64748b;text-transform:uppercase;font-weight:700">Confidence</div>
+      <div style="font-size:1.3em;font-weight:800;color:#e2e8f0">{conf_pct}</div>
+      <div style="background:#0f172a;border-radius:4px;height:4px;width:80px;margin-top:4px">
+        <div style="background:{a_color};border-radius:4px;height:4px;width:{conf_bar_w}"></div>
+      </div>
+    </div>
   </div>
 
-  <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:14px 18px">
-    <div style="font-size:.75em;color:#64748b;text-transform:uppercase;font-weight:700;margin-bottom:10px">Decision History</div>
-    {"".join(
-        f'<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #0f172a">'
-        f'<span style="font-size:.75em;color:#64748b;width:50px">R{r["round"]}</span>'
-        f'<span style="font-size:.75em;color:#a5b4fc;font-weight:600;width:80px">{r.get("action","?").upper()}</span>'
-        f'<span style="font-size:.75em;color:#64748b">{r.get("attack_family","?")}</span>'
-        f'<span style="margin-left:auto;font-size:.72em;color:#475569">{r.get("timestamp","")[:10]}</span>'
-        f'</div>'
-        for r in reversed(lineage.get("rounds", []))
-    ) or "<div style='color:#475569;font-size:.82em'>No history yet</div>"}
+  <!-- Models to Retrain -->
+  <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:12px 16px;margin-bottom:12px">
+    <div style="font-size:.72em;color:#64748b;text-transform:uppercase;font-weight:700;margin-bottom:8px">Detectors Selected for Retraining</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">{retrain_chips}</div>
   </div>
-  <div style="margin-top:8px;color:#475569;font-size:.75em;text-align:right">Round {s.get("round",0)} · {s.get("timestamp","—")}</div>
+
+  <!-- Reasoning -->
+  <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:14px 18px;margin-bottom:14px">
+    <div style="font-size:.72em;color:#64748b;text-transform:uppercase;font-weight:700;margin-bottom:8px">Orchestrator Reasoning</div>
+    <div style="color:#cbd5e1;font-size:.93em;line-height:1.75;white-space:pre-wrap">{reason}</div>
+  </div>
+
+  <!-- Decision History -->
+  <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:14px 18px">
+    <div style="font-size:.72em;color:#64748b;text-transform:uppercase;font-weight:700;margin-bottom:8px">Decision History</div>
+    {hist_rows or "<div style='color:#475569;font-size:.82em'>No history yet</div>"}
+  </div>
+
+  <div style="margin-top:8px;color:#475569;font-size:.75em;text-align:right">Round {s.get("round",0)} · {s.get("timestamp","—")[:19]}</div>
 </div>"""
 
 # ── CSS ───────────────────────────────────────────────────────────────────────

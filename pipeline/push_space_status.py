@@ -70,15 +70,14 @@ def build_status(round_num: int) -> dict:
 
     # Orchestrator decision
     decision_path = RESULTS_DIR / "pipeline_decision.json"
-    orch = {"action": "none", "severity": "none", "confidence": None, "argo_workflow": "none", "reason": "Pending."}
+    orch = {"action": "none", "confidence": None, "reason": "Pending.", "models_to_retrain": []}
     if decision_path.exists():
         d = json.loads(decision_path.read_text(encoding="utf-8"))
         orch = {
             "action": d.get("action", "none"),
-            "severity": d.get("severity", "none"),
             "confidence": d.get("confidence"),
-            "argo_workflow": d.get("argo_workflow", "none"),
             "reason": d.get("reason", ""),
+            "models_to_retrain": d.get("models_to_retrain", []),
         }
 
     overall = round_num > 0 and any(v for v in weakness_scores.values() if v)
