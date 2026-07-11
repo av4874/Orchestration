@@ -1,6 +1,6 @@
 {
-  "round": 13,
-  "timestamp": "2026-07-11T14:20:29.184148+00:00",
+  "round": 14,
+  "timestamp": "2026-07-11T14:45:17.553278+00:00",
   "detectors_retrained": [
     "jailbreak",
     "insecure_output",
@@ -13,9 +13,9 @@
       "train_size": 32,
       "eval_f1": 0.873,
       "eval_accuracy": 0.875,
-      "eval_loss": 0.8764,
-      "training_loss": 1.1139,
-      "evasion_rate_before": 0.75,
+      "eval_loss": 1.0247,
+      "training_loss": 0.9327,
+      "evasion_rate_before": 0.6667,
       "evasion_rate_after": 0.25
     },
     "insecure_output": {
@@ -24,8 +24,8 @@
       "train_size": 32,
       "eval_f1": 0.873,
       "eval_accuracy": 0.875,
-      "eval_loss": 0.6257,
-      "training_loss": 1.2165,
+      "eval_loss": 0.6787,
+      "training_loss": 1.2024,
       "evasion_rate_before": 0.3333,
       "evasion_rate_after": 0.4
     },
@@ -35,8 +35,8 @@
       "train_size": 32,
       "eval_f1": 1.0,
       "eval_accuracy": 1.0,
-      "eval_loss": 0.0376,
-      "training_loss": 0.4491,
+      "eval_loss": 0.0351,
+      "training_loss": 0.4527,
       "evasion_rate_before": 0.3333,
       "evasion_rate_after": 0.1
     }
@@ -45,7 +45,7 @@
   "output_model": "Builder117/distilbert-jailbreak",
   "eval_f1": 0.873,
   "eval_accuracy": 0.875,
-  "eval_loss": 0.8764,
+  "eval_loss": 1.0247,
   "train_size": 32,
   "evasion_rate_after": 0.25,
   "status": "success"
