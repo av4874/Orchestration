@@ -1,0 +1,10 @@
+{
+  "round": 8,
+  "mode": "live_qwen3",
+  "agent": "orchestrator",
+  "model": "Qwen/Qwen3-8B-INT4",
+  "total_tokens": 439,
+  "steps": 5,
+  "final_output": "The routing decision has been successfully written to the pipeline. The action is to retrain the \"injection\" detector due to an evasion score of 0.42, which meets the threshold for retraining. The next attack families will focus on \"unknown\" based on the current findings. The round summary has also been recorded in the attack memory.",
+  "timestamp": "2026-07-11T10:04:27.833986+00:00"
+}
