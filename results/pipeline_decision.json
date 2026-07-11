@@ -1,5 +1,5 @@
 {
-  "round": 11,
+  "round": 12,
   "action": "retrain",
   "models_to_retrain": [
     "jailbreak",
@@ -10,5 +10,5 @@
   "next_attack_families": [
     "unknown"
   ],
-  "timestamp": "2026-07-11T13:26:15.113963+00:00"
+  "timestamp": "2026-07-11T13:54:11.638292+00:00"
 }

@@ -79,6 +79,14 @@
       "top_family": "unknown",
       "evasion_rate": 0.5714,
       "action": "retrain"
+    },
+    {
+      "round": 12,
+      "timestamp": "2026-07-11T13:58:21.673066+00:00",
+      "families_tried": [],
+      "top_family": "unknown",
+      "evasion_rate": 0.5,
+      "action": "retrain"
     }
   ],
   "current_focus": [],
