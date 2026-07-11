@@ -5,6 +5,6 @@
   "model": "Qwen/Qwen3-8B-INT4",
   "total_tokens": 430,
   "steps": 7,
-  "final_output": "The vulnerability report has been successfully sent to the orchestrator. The analysis identified critical weaknesses in the detectors `jailbreak`, `insecure_output`, and `indirect_injection` with evasion scores of 1.0. These detectors require retraining to improve their effectiveness against the identified attack patterns. The report includes the necessary details for the orchestrator to take action.",
-  "timestamp": "2026-07-10T21:17:24.453746+00:00"
+  "final_output": "The vulnerability report has been successfully sent to the orchestrator. The analysis identified critical weaknesses in the detectors `jailbreak`, `insecure_output`, and `indirect_injection` with evasion scores of 1.0. These detectors require retraining to improve their effectiveness against the identified attack families. The report includes the necessary details for the orchestrator to take action.",
+  "timestamp": "2026-07-11T06:48:23.765837+00:00"
 }
