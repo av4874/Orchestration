@@ -1,15 +1,14 @@
 {
-  "round": 10,
+  "round": 11,
   "action": "retrain",
   "models_to_retrain": [
     "jailbreak",
-    "indirect_injection",
     "insecure_output"
   ],
   "confidence": 0.95,
-  "reason": "Evasion score for injection detector is 0.42, which meets the threshold for retraining. [GHA override: evasion data required retrain ['jailbreak', 'indirect_injection', 'insecure_output']; LLM said retrain ['injection']]",
+  "reason": "Evasion score for injection detector is 0.42, which meets the threshold for retraining. [GHA override: evasion data required retrain ['jailbreak', 'insecure_output']; LLM said retrain ['injection']]",
   "next_attack_families": [
     "unknown"
   ],
-  "timestamp": "2026-07-11T13:01:23.664801+00:00"
+  "timestamp": "2026-07-11T13:26:15.113963+00:00"
 }
