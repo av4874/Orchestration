@@ -1,21 +1,22 @@
 {
-  "round": 5,
-  "timestamp": "2026-07-11T08:16:55.415896+00:00",
+  "round": 6,
+  "timestamp": "2026-07-11T08:55:08.259166+00:00",
   "detectors_retrained": [
-    "jailbreak",
-    "insecure_output"
+    "injection",
+    "insecure_output",
+    "indirect_injection"
   ],
   "per_detector": {
-    "jailbreak": {
+    "injection": {
       "hub_pushed": true,
-      "output_model": "Builder117/distilbert-jailbreak",
-      "train_size": 24,
-      "eval_f1": 0.8148,
-      "eval_accuracy": 0.8333,
-      "eval_loss": 0.8905,
-      "training_loss": 1.2668,
-      "evasion_rate_before": 0.8,
-      "evasion_rate_after": 0.6
+      "output_model": "Builder117/distilbert-prompt-injection",
+      "train_size": 32,
+      "eval_f1": 1.0,
+      "eval_accuracy": 1.0,
+      "eval_loss": 0.0028,
+      "training_loss": 0.0101,
+      "evasion_rate_before": 1.0,
+      "evasion_rate_after": 0.0
     },
     "insecure_output": {
       "hub_pushed": true,
@@ -23,18 +24,29 @@
       "train_size": 24,
       "eval_f1": 0.5333,
       "eval_accuracy": 0.6667,
-      "eval_loss": 1.6151,
+      "eval_loss": 1.615,
       "training_loss": 1.6458,
       "evasion_rate_before": 1.0,
       "evasion_rate_after": 1.0
+    },
+    "indirect_injection": {
+      "hub_pushed": true,
+      "output_model": "Builder117/distilbert-indirect-injection",
+      "train_size": 24,
+      "eval_f1": 1.0,
+      "eval_accuracy": 1.0,
+      "eval_loss": 0.0886,
+      "training_loss": 0.8871,
+      "evasion_rate_before": 1.0,
+      "evasion_rate_after": 0.3
     }
   },
   "hub_pushed": true,
-  "output_model": "Builder117/distilbert-jailbreak",
-  "eval_f1": 0.8148,
-  "eval_accuracy": 0.8333,
-  "eval_loss": 0.8905,
-  "train_size": 24,
-  "evasion_rate_after": 0.6,
+  "output_model": "Builder117/distilbert-prompt-injection",
+  "eval_f1": 1.0,
+  "eval_accuracy": 1.0,
+  "eval_loss": 0.0028,
+  "train_size": 32,
+  "evasion_rate_after": 0.0,
   "status": "success"
 }

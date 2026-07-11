@@ -1,0 +1,10 @@
+{
+  "round": 6,
+  "mode": "live_qwen3",
+  "agent": "orchestrator",
+  "model": "Qwen/Qwen3-8B-INT4",
+  "total_tokens": 531,
+  "steps": 7,
+  "final_output": "Round 6 orchestration completed with action: **skip**.  \n- **Confidence**: 0.95  \n- **Reason**: No critical evasion gaps detected. All detectors show low evasion rates, indicating no urgent retraining needed.  \n- **Next Attack Families**: `unknown`  \n\nThe round summary has been saved to `attack_memory.json`.  \nNo models were selected for retraining.",
+  "timestamp": "2026-07-11T08:51:11.084583+00:00"
+}
